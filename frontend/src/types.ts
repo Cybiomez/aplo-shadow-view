@@ -55,3 +55,23 @@ export interface UpdateNotice {
   current?: string;
   channel?: Channel;
 }
+
+/** Кластер: имя + список серверов. */
+export interface Cluster { name: string; servers: string[]; }
+
+/** Реестр серверов и кластеров. */
+export interface Registry { clusters: Cluster[]; servers: string[]; }
+
+/** Результат опроса одного сервера. */
+export interface ServerPoll {
+  server: string;
+  ok: boolean;          // сервер ответил
+  sessions: Session[];  // его сеансы
+  error: string;        // причина, если ok=false
+}
+
+/** Итог импорта реестра. */
+export interface ImportResult {
+  added: { clusters: number; servers: number };
+  registry: Registry;
+}

@@ -15,7 +15,7 @@ import sys
 from . import actions, policy, updater
 from .servers import ServerRegistry
 from .config import Config
-from .sessions import list_sessions
+from .sessions import list_sessions, probe
 from .version import VERSION
 
 
@@ -37,6 +37,17 @@ class Api:
     # --- сеансы ---
     def list_sessions(self, server: str = "") -> list[dict]:
         return list_sessions(server)
+
+    def poll_servers(self, servers: list) -> list:
+        """Параллельный опрос ТОЛЬКО переданных серверов (то, что открыто по фильтрам).
+        Возвращает список {server, ok, sessions, error}. Один зависший не вешает
+        остальных — у каждого свой таймаут (в probe)."""
+        names = [s for s in (servers or []) if s]
+        if not names:
+            return []
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=min(8, len(names))) as ex:
+            return list(ex.map(probe, names))
 
     def shadow(self, sid: int, mode: str, server: str = "") -> dict:
         return actions.shadow(int(sid), mode, server)
@@ -78,6 +89,65 @@ class Api:
     def import_registry(self, payload: dict) -> dict:
         added = self._registry.import_data(payload)
         return {"added": added, "registry": self._registry.as_dict()}
+
+    # --- импорт/экспорт файлом (диалоги pywebview) ---
+    def export_file(self, kind: str, name: str = "") -> dict:
+        """kind: cluster | server | registry. Открывает диалог сохранения."""
+        if kind == "cluster":
+            payload = self._registry.export_cluster(name)
+            suggested = f"{name}.asvcluster"
+        elif kind == "server":
+            payload = self._registry.export_server(name)
+            suggested = f"{name}.asvserver"
+        else:
+            payload = self._registry.export_all()
+            suggested = "aploshadowview-registry.json"
+        if payload is None:
+            return {"ok": False, "message": "Нечего экспортировать"}
+        return self._save_dialog(payload, suggested)
+
+    def import_file(self) -> dict | None:
+        data = self._open_dialog()
+        if data is None:
+            return None
+        try:
+            added = self._registry.import_data(data)
+        except ValueError as e:
+            return {"error": str(e)}
+        return {"added": added, "registry": self._registry.as_dict()}
+
+    def _save_dialog(self, payload: dict, suggested: str) -> dict:
+        try:
+            import json as _json
+            import webview
+            win = webview.active_window()
+            if win is None:
+                return {"ok": False, "message": "Нет активного окна"}
+            path = win.create_file_dialog(webview.SAVE_DIALOG, save_filename=suggested)
+            if not path:
+                return {"ok": False, "message": "Отменено"}
+            target = path if isinstance(path, str) else path[0]
+            with open(target, "w", encoding="utf-8") as fh:
+                _json.dump(payload, fh, ensure_ascii=False, indent=2)
+            return {"ok": True, "message": f"Сохранено: {target}"}
+        except Exception as e:
+            return {"ok": False, "message": f"Ошибка экспорта: {e}"}
+
+    def _open_dialog(self) -> dict | None:
+        try:
+            import json as _json
+            import webview
+            win = webview.active_window()
+            if win is None:
+                return None
+            paths = win.create_file_dialog(webview.OPEN_DIALOG, allow_multiple=False)
+            if not paths:
+                return None
+            src = paths[0] if isinstance(paths, (list, tuple)) else paths
+            with open(src, "r", encoding="utf-8") as fh:
+                return _json.load(fh)
+        except Exception:
+            return None
 
     # --- настройки ---
     def get_settings(self) -> dict:

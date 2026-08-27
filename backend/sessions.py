@@ -89,3 +89,35 @@ def list_sessions(server: str = "") -> list[dict]:
         me = ""
     # «вы» имеет смысл только на локальном сервере
     return _parse(_decode(raw), me if not server else "")
+
+
+def probe(server: str) -> dict:
+    """Опрос одного сервера с различением «пусто» и «недоступен».
+    Возвращает {server, ok, sessions, error}."""
+    if sys.platform != "win32":
+        return {"server": server, "ok": True, "sessions": list_sessions(server), "error": ""}
+    cmd = ["quser"]
+    if server:
+        cmd.append(f"/server:{server}")
+    try:
+        proc = subprocess.run(
+            cmd, capture_output=True, timeout=10,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except subprocess.TimeoutExpired:
+        return {"server": server, "ok": False, "sessions": [], "error": "таймаут"}
+    except OSError as e:
+        return {"server": server, "ok": False, "sessions": [], "error": str(e)}
+    # quser возвращает код 1 и текст в stderr, если нет сеансов ИЛИ сервер недоступен
+    if proc.returncode != 0 and not proc.stdout.strip():
+        err = _decode(proc.stderr).strip().lower()
+        # «No User exists» / «Пользователи не найдены» — это пусто, а не ошибка
+        if "no user" in err or "не найден" in err or "нет польз" in err:
+            return {"server": server, "ok": True, "sessions": [], "error": ""}
+        return {"server": server, "ok": False, "sessions": [], "error": _decode(proc.stderr).strip() or "недоступен"}
+    try:
+        me = getpass.getuser()
+    except Exception:
+        me = ""
+    return {"server": server, "ok": True,
+            "sessions": _parse(_decode(proc.stdout), me if not server else ""), "error": ""}

@@ -15,24 +15,42 @@ import type {
   ShadowMode,
   UpdateInfo,
   UpdateNotice,
+  ServerPoll,
+  Registry,
+  ImportResult,
 } from "./types";
 
 /** Контракт, которым пользуется весь UI. */
 export interface ShadowApi {
   getServerName(): Promise<string>;
   getVersion(): Promise<string>;
-  listSessions(): Promise<Session[]>;
-  shadow(sid: number, mode: ShadowMode): Promise<ActionResult>;
-  disconnect(sid: number): Promise<ActionResult>;
-  logoff(sid: number): Promise<ActionResult>;
+  listSessions(server?: string): Promise<Session[]>;
+  pollServers(servers: string[]): Promise<ServerPoll[]>;
+  shadow(sid: number, mode: ShadowMode, server?: string): Promise<ActionResult>;
+  disconnect(sid: number, server?: string): Promise<ActionResult>;
+  logoff(sid: number, server?: string): Promise<ActionResult>;
+
+  // реестр серверов и кластеров
+  getRegistry(): Promise<Registry>;
+  addCluster(name: string): Promise<Registry>;
+  removeCluster(name: string): Promise<Registry>;
+  renameCluster(oldName: string, newName: string): Promise<Registry>;
+  addServer(name: string, cluster?: string): Promise<Registry>;
+  removeServer(name: string, cluster?: string): Promise<Registry>;
+  exportCluster(name: string): Promise<unknown>;
+  exportServer(name: string): Promise<unknown>;
+  exportRegistry(): Promise<unknown>;
+  importRegistry(payload: unknown): Promise<ImportResult>;
+  exportFile(kind: string, name?: string): Promise<ActionResult>;
+  importFile(): Promise<ImportResult | null>;
 
   getSettings(): Promise<Settings>;
   setChannel(channel: string): Promise<void>;
   setPolicyMinutes(minutes: number): Promise<void>;
 
-  getPolicy(): Promise<PolicyState>;
-  enableEmergency(): Promise<PolicyState>;   // включить режим без подтверждения
-  disableEmergency(): Promise<PolicyState>;  // вернуть подтверждение вручную
+  getPolicy(server?: string): Promise<PolicyState>;
+  enableEmergency(server?: string): Promise<PolicyState>;
+  disableEmergency(server?: string): Promise<PolicyState>;
 
   openLog(): Promise<void>;
   getUpdateNotification(): Promise<UpdateNotice>;
@@ -48,16 +66,29 @@ class RealApi implements ShadowApi {
   }
   getServerName() { return this.api.get_server_name(); }
   getVersion() { return this.api.get_version(); }
-  listSessions() { return this.api.list_sessions(); }
-  shadow(sid: number, mode: ShadowMode) { return this.api.shadow(sid, mode); }
-  disconnect(sid: number) { return this.api.disconnect(sid); }
-  logoff(sid: number) { return this.api.logoff(sid); }
+  listSessions(server = "") { return this.api.list_sessions(server); }
+  pollServers(servers: string[]) { return this.api.poll_servers(servers); }
+  shadow(sid: number, mode: ShadowMode, server = "") { return this.api.shadow(sid, mode, server); }
+  disconnect(sid: number, server = "") { return this.api.disconnect(sid, server); }
+  logoff(sid: number, server = "") { return this.api.logoff(sid, server); }
+  getRegistry() { return this.api.get_registry(); }
+  addCluster(name: string) { return this.api.add_cluster(name); }
+  removeCluster(name: string) { return this.api.remove_cluster(name); }
+  renameCluster(o: string, n: string) { return this.api.rename_cluster(o, n); }
+  addServer(name: string, cluster = "") { return this.api.add_server(name, cluster); }
+  removeServer(name: string, cluster = "") { return this.api.remove_server(name, cluster); }
+  exportCluster(name: string) { return this.api.export_cluster(name); }
+  exportServer(name: string) { return this.api.export_server(name); }
+  exportRegistry() { return this.api.export_registry(); }
+  importRegistry(payload: unknown) { return this.api.import_registry(payload); }
+  exportFile(kind: string, name = "") { return this.api.export_file(kind, name); }
+  importFile() { return this.api.import_file(); }
   getSettings() { return this.api.get_settings(); }
   setChannel(channel: string) { return this.api.set_channel(channel); }
   setPolicyMinutes(minutes: number) { return this.api.set_policy_minutes(minutes); }
-  getPolicy() { return this.api.get_policy(); }
-  enableEmergency() { return this.api.enable_emergency(); }
-  disableEmergency() { return this.api.disable_emergency(); }
+  getPolicy(server = "") { return this.api.get_policy(server); }
+  enableEmergency(server = "") { return this.api.enable_emergency(server); }
+  disableEmergency(server = "") { return this.api.disable_emergency(server); }
   openLog() { return this.api.open_log(); }
   getUpdateNotification() { return this.api.get_update_notification(); }
   dismissUpdate(version: string) { return this.api.dismiss_update(version); }
@@ -67,7 +98,14 @@ class RealApi implements ShadowApi {
 
 /** Заглушка для отладки вида в браузере (npm run dev). */
 class MockApi implements ShadowApi {
-  private sessions: Session[] = [
+  private registry: Registry = {
+    clusters: [
+      { name: "Терминалы Москва", servers: ["TS-01", "TS-02", "TS-03"] },
+      { name: "1С-фермы", servers: ["1C-APP-01", "1C-APP-02"] },
+    ],
+    servers: ["STANDALONE-01"],
+  };
+  private base: Session[] = [
     { name: "admin", sid: 1, state: "active", idle: "нет", you: true },
     { name: "i.ivanov", sid: 3, state: "active", idle: "2 мин", you: false },
     { name: "p.petrov", sid: 4, state: "active", idle: "6 мин", you: false },
@@ -82,29 +120,49 @@ class MockApi implements ShadowApi {
   private wait<T>(value: T, ms = 250): Promise<T> {
     return new Promise((res) => setTimeout(() => res(value), ms));
   }
-  private byId(sid: number) {
-    return this.sessions.find((s) => s.sid === sid)?.name ?? String(sid);
-  }
 
   getServerName() { return this.wait("TERMINAL-01"); }
   getVersion() { return this.wait("0.1.0"); }
-  listSessions() { return this.wait(this.sessions.slice()); }
-  shadow(sid: number, mode: ShadowMode) {
-    const who = this.byId(sid);
-    const msg = mode === "view"
-      ? `Запрос на просмотр отправлен пользователю ${who}`
-      : `Запрос на управление отправлен пользователю ${who}`;
+  listSessions(_server = "") { return this.wait(this.base.slice()); }
+  pollServers(servers: string[]) {
+    // на каждый сервер — свой набор сеансов (сдвиг для наглядности); один «недоступен»
+    const polls: ServerPoll[] = servers.map((srv, i) => {
+      if (srv === "TS-03") return { server: srv, ok: false, sessions: [], error: "таймаут" };
+      const shift = i;
+      const sessions = this.base.slice(0, 3 + (i % 3)).map((s, j) => ({
+        ...s, sid: s.sid + shift * 10, you: false,
+        idle: j === 0 ? "нет" : `${(j + i) * 3} мин`,
+      }));
+      return { server: srv, ok: true, sessions, error: "" };
+    });
+    return this.wait(polls, 400);
+  }
+  shadow(sid: number, mode: ShadowMode, _server = "") {
+    const msg = mode === "view" ? `Запрос на просмотр отправлен (сеанс ${sid})` : `Запрос на управление отправлен (сеанс ${sid})`;
     return this.wait({ ok: true, message: msg });
   }
-  disconnect(sid: number) { return this.wait({ ok: true, message: `Сеанс пользователя ${this.byId(sid)} отключён` }); }
-  logoff(sid: number) { return this.wait({ ok: true, message: `Пользователь ${this.byId(sid)} выведен из системы` }); }
+  disconnect(sid: number, _server = "") { return this.wait({ ok: true, message: `Сеанс ${sid} отключён` }); }
+  logoff(sid: number, _server = "") { return this.wait({ ok: true, message: `Сеанс ${sid} — выход выполнен` }); }
+
+  getRegistry() { return this.wait(structuredClone(this.registry)); }
+  addCluster(name: string) { if (name && !this.registry.clusters.some((c) => c.name === name)) this.registry.clusters.push({ name, servers: [] }); return this.wait(structuredClone(this.registry)); }
+  removeCluster(name: string) { this.registry.clusters = this.registry.clusters.filter((c) => c.name !== name); return this.wait(structuredClone(this.registry)); }
+  renameCluster(o: string, n: string) { const c = this.registry.clusters.find((x) => x.name === o); if (c && n) c.name = n; return this.wait(structuredClone(this.registry)); }
+  addServer(name: string, cluster = "") { if (!name) return this.wait(structuredClone(this.registry)); if (cluster) { const c = this.registry.clusters.find((x) => x.name === cluster); if (c && !c.servers.includes(name)) c.servers.push(name); } else if (!this.registry.servers.includes(name)) this.registry.servers.push(name); return this.wait(structuredClone(this.registry)); }
+  removeServer(name: string, cluster = "") { if (cluster) { const c = this.registry.clusters.find((x) => x.name === cluster); if (c) c.servers = c.servers.filter((s) => s !== name); } else this.registry.servers = this.registry.servers.filter((s) => s !== name); return this.wait(structuredClone(this.registry)); }
+  exportCluster(name: string) { const c = this.registry.clusters.find((x) => x.name === name); return this.wait(c ? { type: "aploshadowview/cluster", version: 1, cluster: c } : null); }
+  exportServer(name: string) { return this.wait({ type: "aploshadowview/server", version: 1, server: name }); }
+  exportRegistry() { return this.wait({ type: "aploshadowview/registry", version: 1, ...this.registry }); }
+  importRegistry(_payload: unknown) { return this.wait<ImportResult>({ added: { clusters: 0, servers: 0 }, registry: structuredClone(this.registry) }); }
+  exportFile(_kind: string, _name = "") { return this.wait<ActionResult>({ ok: true, message: "(демо) экспортировано в файл" }); }
+  importFile() { return this.wait<ImportResult | null>({ added: { clusters: 1, servers: 2 }, registry: structuredClone(this.registry) }); }
 
   getSettings() { return this.wait(this.settings); }
   setChannel(channel: string) { this.settings.channel = channel as Settings["channel"]; return this.wait(undefined); }
   setPolicyMinutes(minutes: number) { this.settings.policyMinutes = minutes; this.policy.minutes = minutes; return this.wait(undefined); }
 
-  getPolicy() { return this.wait(this.policy); }
-  enableEmergency() {
+  getPolicy(_server = "") { return this.wait(this.policy); }
+  enableEmergency(_server = "") {
     this.policy = { active: true, remaining: this.settings.policyMinutes * 60, minutes: this.settings.policyMinutes };
     if (this.timer) clearInterval(this.timer);
     this.timer = window.setInterval(() => {
@@ -113,7 +171,7 @@ class MockApi implements ShadowApi {
     }, 1000);
     return this.wait(this.policy, 150);
   }
-  disableEmergency() {
+  disableEmergency(_server = "") {
     this.policy = { active: false, remaining: 0, minutes: this.settings.policyMinutes };
     if (this.timer) clearInterval(this.timer);
     return this.wait(this.policy, 150);
