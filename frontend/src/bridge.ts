@@ -33,6 +33,7 @@ export interface ShadowApi {
   enableEmergency(): Promise<PolicyState>;   // включить режим без подтверждения
   disableEmergency(): Promise<PolicyState>;  // вернуть подтверждение вручную
 
+  openLog(): Promise<void>;
   checkUpdate(): Promise<UpdateInfo>;
   applyUpdate(): Promise<ActionResult>;
 }
@@ -54,6 +55,7 @@ class RealApi implements ShadowApi {
   getPolicy() { return this.api.get_policy(); }
   enableEmergency() { return this.api.enable_emergency(); }
   disableEmergency() { return this.api.disable_emergency(); }
+  openLog() { return this.api.open_log(); }
   checkUpdate() { return this.api.check_update(); }
   applyUpdate() { return this.api.apply_update(); }
 }
@@ -112,6 +114,7 @@ class MockApi implements ShadowApi {
     return this.wait(this.policy, 150);
   }
 
+  openLog() { console.log("(демо) открыть журнал"); return this.wait(undefined); }
   checkUpdate() {
     const dev = this.settings.channel === "dev";
     return this.wait<UpdateInfo>({
