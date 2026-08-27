@@ -1,3 +1,6 @@
 # Только окно вебвью. Всё остальное — стандартная библиотека Python.
 # На Windows pywebview использует WebView2 (Edge), на Linux — WebKitGTK.
 pywebview>=5.0
+# корневые CA-сертификаты — иначе в PyInstaller-сборке HTTPS-проверка падает
+# (CERTIFICATE_VERIFY_FAILED при обращении к GitHub)
+certifi>=2024.0.0

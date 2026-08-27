@@ -47,3 +47,11 @@ export interface ActionResult {
   ok: boolean;
   message: string;
 }
+
+/** Уведомление об обновлении (баббл). */
+export interface UpdateNotice {
+  show: boolean;
+  version?: string;
+  current?: string;
+  channel?: Channel;
+}
