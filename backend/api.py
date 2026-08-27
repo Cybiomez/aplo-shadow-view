@@ -65,6 +65,11 @@ class Api:
     def disable_emergency(self) -> dict:
         return policy.disable_emergency()
 
+    # --- журнал ---
+    def open_log(self) -> None:
+        from . import audit
+        audit.open_log()
+
     # --- обновление ---
     def check_update(self) -> dict:
         info = updater.check(self._config.channel)
