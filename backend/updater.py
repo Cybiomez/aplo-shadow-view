@@ -192,14 +192,22 @@ def _swap_windows(new_file: str, target: str) -> None:
     pid = os.getpid()
     log = str(app_dir() / "update.log")
     bat_path = os.path.join(os.environ.get("TEMP", os.path.dirname(target)), "aplo-shadow-update.bat")
+    exe_name = os.path.basename(target)
+    # onefile-сборка = загрузчик (родитель) + приложение (этот процесс). Гасим оба
+    # по PID (только свои копии — на терминальном сервере чужие не трогаем).
+    ppid = os.getppid() if getattr(sys, "frozen", False) else 0
+    kill_parent = (f'taskkill /PID {ppid} /F >nul 2>&1\r\n') if ppid else ""
     script = (
         "@echo off\r\n"
         f'echo [%date% %time%] helper start pid={pid} >> "{log}"\r\n'
-        ":wait\r\n"
-        f'tasklist /FI "PID eq {pid}" 2>nul | find "{pid}" >nul\r\n'
-        "if not errorlevel 1 ( ping -n 2 127.0.0.1 >nul & goto wait )\r\n"
+        "rem дать приложению закрыться самому (os._exit)\r\n"
+        "ping -n 3 127.0.0.1 >nul\r\n"
+        "rem если ещё живо — принудительно завершить ТОЛЬКО свою копию (по PID)\r\n"
+        f'tasklist /FI "PID eq {pid}" 2>nul | find "{pid}" >nul && taskkill /PID {pid} /F >nul 2>&1\r\n'
+        f'{kill_parent}'
+        "ping -n 2 127.0.0.1 >nul\r\n"
         f'del "{old_path}" >nul 2>&1\r\n'
-        f'echo [%date% %time%] restarting >> "{log}"\r\n'
+        f'echo [%date% %time%] restarting {exe_name} >> "{log}"\r\n'
         f'start "" "{target}"\r\n'
         'del "%~f0"\r\n'
     )
