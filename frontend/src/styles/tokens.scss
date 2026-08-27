@@ -1,0 +1,55 @@
+// Токены оформления: пастельно-голубая палитра, нейтральные с синим подтоном.
+// Три состояния темы: системная (bare :root + prefers-color-scheme) и явный
+// выбор через [data-theme]. Компоненты берут только эти переменные.
+
+:root {
+  --ground: #E9F0F8;
+  --surface: #FFFFFF;
+  --surface-2: #F4F8FD;
+  --border: #D5E1EF;
+  --border-strong: #BFD0E4;
+  --ink: #1F2A38;
+  --muted: #5E6E82;
+  --faint: #8494A6;
+  --accent: #5788C2;
+  --accent-hover: #4A78B0;
+  --accent-weak: #E1ECF8;
+  --accent-ink: #FFFFFF;
+  --good: #4B9A73;
+  --good-weak: #E0F0E8;
+  --warn: #B9823A;
+  --warn-weak: #F6EBD9;
+  --crit: #BC6767;
+  --crit-weak: #F6E3E3;
+  --shadow: 0 1px 2px rgba(31, 42, 56, .06), 0 8px 24px rgba(31, 42, 56, .08);
+  --shadow-modal: 0 12px 48px rgba(31, 42, 56, .22);
+  --radius: 10px;
+}
+
+@mixin dark-tokens {
+  --ground: #0F151D;
+  --surface: #1A222D;
+  --surface-2: #212B37;
+  --border: #2B3846;
+  --border-strong: #3A4A5B;
+  --ink: #E6EDF5;
+  --muted: #96A5B7;
+  --faint: #6B7C90;
+  --accent: #7FA9DA;
+  --accent-hover: #93B8E4;
+  --accent-weak: #223244;
+  --accent-ink: #10151C;
+  --good: #6FB894;
+  --good-weak: #1B2E28;
+  --warn: #D6A65E;
+  --warn-weak: #33291A;
+  --crit: #D68585;
+  --crit-weak: #34211F;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .4);
+  --shadow-modal: 0 12px 48px rgba(0, 0, 0, .6);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { @include dark-tokens; }
+}
+:root[data-theme="dark"] { @include dark-tokens; }

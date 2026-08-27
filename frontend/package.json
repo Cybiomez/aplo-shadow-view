@@ -1,0 +1,17 @@
+{
+  "name": "aplo-shadow-view-frontend",
+  "version": "0.0.0",
+  "description": "UI AploShadowView — рендерится в окне вебвью",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "sass": "^1.77.0",
+    "typescript": "^5.5.0",
+    "vite": "^5.4.0"
+  }
+}

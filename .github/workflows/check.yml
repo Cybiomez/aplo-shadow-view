@@ -1,0 +1,33 @@
+name: check
+
+# Быстрая проверка сборки на пуш в ветки — ловим ошибки фронта и бэка без тега.
+
+on:
+  push:
+    branches: ["dev", "feat/**", "fix/**"]
+  pull_request:
+    branches: ["dev"]
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Build frontend (tsc + vite)
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Compile backend
+        run: python -m compileall backend main.py

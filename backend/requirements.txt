@@ -1,0 +1,3 @@
+# Только окно вебвью. Всё остальное — стандартная библиотека Python.
+# На Windows pywebview использует WebView2 (Edge), на Linux — WebKitGTK.
+pywebview>=5.0

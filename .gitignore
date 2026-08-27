@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# Node / frontend
+node_modules/
+frontend/dist/
+
+# PyInstaller
+build/*/
+dist/
+*.spec.bak
+
+# Локальные данные приложения / логи
+*.log
+audit.log
+
+# Секреты и окружение
+.env
+*.local
+
+# ОС/редактор
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
