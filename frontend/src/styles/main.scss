@@ -14,10 +14,11 @@ body {
 .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; }
 
 .app {
-  min-height: 100vh;
+  height: 100vh;          /* фиксируем высоту окна: шапка и футер закреплены */
   display: flex;
   flex-direction: column;
   background: var(--surface);
+  overflow: hidden;
 }
 
 /* Title bar */
@@ -131,7 +132,7 @@ body {
 }
 
 /* List */
-.list { flex: 1; padding: 8px; display: flex; flex-direction: column; gap: 6px; overflow-y: auto; }
+.list { flex: 1; min-height: 0; padding: 8px; display: flex; flex-direction: column; gap: 6px; overflow-y: auto; }
 .row {
   display: flex; align-items: center; gap: 14px; padding: 11px 13px;
   border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface);
