@@ -123,6 +123,25 @@ class MockApi implements ShadowApi {
   applyUpdate() { return this.wait({ ok: true, message: "Обновление установлено — перезапуск" }, 1500); }
 }
 
-/** Готовый экземпляр для UI: настоящий мост под pywebview, иначе мок. */
-export const api: ShadowApi =
-  (window as any).pywebview?.api ? new RealApi() : new MockApi();
+/**
+ * Мост для UI. ВАЖНО: выбор реального/мок-моста ленивый — при первом обращении,
+ * а не в момент импорта модуля. pywebview внедряет window.pywebview.api асинхронно
+ * (по событию pywebviewready), и если зафиксировать мост при загрузке, он навсегда
+ * станет MockApi. Прокси откладывает выбор до первого вызова (он идёт из bootstrap,
+ * уже после готовности pywebview) → на Windows берётся RealApi.
+ */
+let impl: ShadowApi | null = null;
+function resolve(): ShadowApi {
+  if (!impl) {
+    impl = (window as any).pywebview?.api ? new RealApi() : new MockApi();
+  }
+  return impl;
+}
+
+export const api: ShadowApi = new Proxy({} as ShadowApi, {
+  get(_target, prop: string | symbol) {
+    const target = resolve() as unknown as Record<string | symbol, unknown>;
+    const value = target[prop];
+    return typeof value === "function" ? (value as Function).bind(target) : value;
+  },
+});
