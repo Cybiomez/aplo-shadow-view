@@ -13,6 +13,7 @@ import socket
 import sys
 
 from . import actions, policy, updater
+from .servers import ServerRegistry
 from .config import Config
 from .sessions import list_sessions
 from .version import VERSION
@@ -21,6 +22,7 @@ from .version import VERSION
 class Api:
     def __init__(self, config: Config) -> None:
         self._config = config
+        self._registry = ServerRegistry()
 
     # --- информация ---
     def get_server_name(self) -> str:
@@ -33,17 +35,49 @@ class Api:
         return VERSION
 
     # --- сеансы ---
-    def list_sessions(self) -> list[dict]:
-        return list_sessions()
+    def list_sessions(self, server: str = "") -> list[dict]:
+        return list_sessions(server)
 
-    def shadow(self, sid: int, mode: str) -> dict:
-        return actions.shadow(int(sid), mode)
+    def shadow(self, sid: int, mode: str, server: str = "") -> dict:
+        return actions.shadow(int(sid), mode, server)
 
-    def disconnect(self, sid: int) -> dict:
-        return actions.disconnect(int(sid))
+    def disconnect(self, sid: int, server: str = "") -> dict:
+        return actions.disconnect(int(sid), server)
 
-    def logoff(self, sid: int) -> dict:
-        return actions.logoff(int(sid))
+    def logoff(self, sid: int, server: str = "") -> dict:
+        return actions.logoff(int(sid), server)
+
+    # --- реестр серверов и кластеров ---
+    def get_registry(self) -> dict:
+        return self._registry.as_dict()
+
+    def add_cluster(self, name: str) -> dict:
+        self._registry.add_cluster(name); return self._registry.as_dict()
+
+    def remove_cluster(self, name: str) -> dict:
+        self._registry.remove_cluster(name); return self._registry.as_dict()
+
+    def rename_cluster(self, old: str, new: str) -> dict:
+        self._registry.rename_cluster(old, new); return self._registry.as_dict()
+
+    def add_server(self, name: str, cluster: str = "") -> dict:
+        self._registry.add_server(name, cluster); return self._registry.as_dict()
+
+    def remove_server(self, name: str, cluster: str = "") -> dict:
+        self._registry.remove_server(name, cluster); return self._registry.as_dict()
+
+    def export_cluster(self, name: str) -> dict | None:
+        return self._registry.export_cluster(name)
+
+    def export_server(self, name: str) -> dict:
+        return self._registry.export_server(name)
+
+    def export_registry(self) -> dict:
+        return self._registry.export_all()
+
+    def import_registry(self, payload: dict) -> dict:
+        added = self._registry.import_data(payload)
+        return {"added": added, "registry": self._registry.as_dict()}
 
     # --- настройки ---
     def get_settings(self) -> dict:
@@ -56,14 +90,14 @@ class Api:
         self._config.policy_minutes = int(minutes)
 
     # --- политика (экстренный режим) ---
-    def get_policy(self) -> dict:
-        return policy.get_policy()
+    def get_policy(self, server: str = "") -> dict:
+        return policy.get_policy(server)
 
-    def enable_emergency(self) -> dict:
-        return policy.enable_emergency(self._config.policy_minutes)
+    def enable_emergency(self, server: str = "") -> dict:
+        return policy.enable_emergency(self._config.policy_minutes, server)
 
-    def disable_emergency(self) -> dict:
-        return policy.disable_emergency()
+    def disable_emergency(self, server: str = "") -> dict:
+        return policy.disable_emergency(server)
 
     # --- журнал ---
     def open_log(self) -> None:
