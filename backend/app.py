@@ -93,6 +93,7 @@ def main() -> None:
         kwargs["y"] = int(state["y"])
 
     window = webview.create_window("AploShadowView", resolve_ui_index(), js_api=api, **kwargs)
+    api.set_window(window)
 
     _wire_geometry(window, config, restore_maximized=bool(state.get("maximized", False)))
 

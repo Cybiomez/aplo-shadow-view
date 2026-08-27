@@ -23,6 +23,7 @@ class Api:
     def __init__(self, config: Config) -> None:
         self._config = config
         self._registry = ServerRegistry()
+        self._window = None
 
     # --- информация ---
     def get_server_name(self) -> str:
@@ -224,5 +225,24 @@ class Api:
         info.pop("_release", None)  # внутреннее наружу не отдаём
         return info
 
+    def set_window(self, window) -> None:
+        self._window = window
+
     def apply_update(self) -> dict:
-        return updater.apply(self._config.channel)
+        res = updater.apply(self._config.channel)
+        if res.get("ok"):
+            # закрыть приложение штатно, чтобы освободить exe для замены;
+            # os._exit — страховка, если destroy не завершит процесс
+            import threading
+            threading.Timer(0.8, self._exit_app).start()
+        return res
+
+    def _exit_app(self) -> None:
+        import os
+        try:
+            if self._window is not None:
+                self._window.destroy()
+        except Exception:
+            pass
+        import threading
+        threading.Timer(2.5, lambda: os._exit(0)).start()
