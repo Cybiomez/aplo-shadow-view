@@ -1,16 +1,29 @@
 import "./styles/main.scss";
 import { bootstrap } from "./app";
 
-// pywebview прокидывает api не мгновенно: если его ещё нет — ждём событие
-// pywebviewready, иначе (браузерный dev) стартуем сразу с мок-мостом.
-function start(): void { bootstrap(); }
+// pywebview внедряет window.pywebview.api не мгновенно — по событию pywebviewready.
+// Стартуем строго после его готовности, иначе первый вызов моста уйдёт в мок.
+// В браузере (dev) объекта pywebview нет вовсе — стартуем с мок-данными.
 
-if ((window as any).pywebview?.api) {
+let started = false;
+function start(): void {
+  if (started) return;
+  started = true;
+  bootstrap();
+}
+
+const w = window as any;
+
+if (w.pywebview?.api) {
+  // api уже готов
   start();
 } else {
-  let started = false;
-  const go = () => { if (!started) { started = true; start(); } };
-  window.addEventListener("pywebviewready", go);
-  // запасной старт для браузера, где события pywebviewready не будет
-  setTimeout(go, 300);
+  window.addEventListener("pywebviewready", start, { once: true });
+  if (w.pywebview) {
+    // мы в окне вебвью, но api ещё не пришёл — подстраховка, если событие упустили
+    setTimeout(() => { if (w.pywebview?.api) start(); }, 4000);
+  } else {
+    // браузерный dev: pywebview отсутствует — стартуем с мок-мостом
+    setTimeout(start, 300);
+  }
 }

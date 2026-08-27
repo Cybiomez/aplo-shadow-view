@@ -19,7 +19,7 @@ let lastFocus: Element | null = null;
 
 export function initModal(): void {
   overlay = document.createElement("div");
-  overlay.className = "overlay";
+  overlay.className = "overlay overlay-top";
   overlay.innerHTML = `
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="mTitle">
       <div class="m-head">

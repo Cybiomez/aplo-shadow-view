@@ -37,3 +37,24 @@ def log(action: str, target: str = "", sid: str | int = "", result: str = "ok") 
             fh.write(line + "\n")
     except OSError:
         pass  # журнал не должен ронять действие
+
+
+def log_path():
+    return app_dir() / "audit.log"
+
+
+def open_log() -> None:
+    """Открыть файл журнала в системе (для кнопки-ссылки в интерфейсе)."""
+    import subprocess
+    import sys as _sys
+    p = log_path()
+    p.touch(exist_ok=True)  # чтобы было что открыть, даже если действий ещё не было
+    try:
+        if _sys.platform == "win32":
+            os.startfile(str(p))  # type: ignore[attr-defined]
+        elif _sys.platform == "darwin":
+            subprocess.Popen(["open", str(p)])
+        else:
+            subprocess.Popen(["xdg-open", str(p)])
+    except OSError:
+        pass

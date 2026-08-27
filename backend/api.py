@@ -65,6 +65,33 @@ class Api:
     def disable_emergency(self) -> dict:
         return policy.disable_emergency()
 
+    # --- журнал ---
+    def open_log(self) -> None:
+        from . import audit
+        audit.open_log()
+
+    # --- уведомление об обновлении ---
+    def get_update_notification(self) -> dict:
+        """Показывать ли уведомление об обновлении. Канал учитывается автоматически:
+        latest — только стабильные новее; dev — любые новее (стабильные и dev).
+        Скрытую пользователем версию не показываем, пока не выйдет ещё свежее."""
+        from .updater import _is_newer, check
+        info = check(self._config.channel)
+        if not info.get("available"):
+            return {"show": False}
+        dismissed = self._config.dismissed_update
+        show = (not dismissed) or _is_newer(info["version"], dismissed)
+        return {
+            "show": show,
+            "version": info["version"],
+            "current": info["current"],
+            "channel": self._config.channel,
+        }
+
+    def dismiss_update(self, version: str) -> None:
+        """«Не показывать» — скрыть до выхода более свежей версии."""
+        self._config.dismissed_update = version
+
     # --- обновление ---
     def check_update(self) -> dict:
         info = updater.check(self._config.channel)

@@ -69,5 +69,32 @@ class Config:
             self._data["policyMinutes"] = value
             self._save()
 
+    # --- какую версию обновления пользователь скрыл («не показывать») ---
+    @property
+    def dismissed_update(self) -> str:
+        return self._data.get("dismissedUpdate", "")
+
+    @dismissed_update.setter
+    def dismissed_update(self, version: str) -> None:
+        self._data["dismissedUpdate"] = version
+        self._save()
+
+    # --- геометрия окна (чтобы вставало как оставили) ---
+    @property
+    def window_state(self) -> dict:
+        return dict(self._data.get("window", {}))
+
+    def update_window(self, **kw) -> None:
+        win = self._data.setdefault("window", {})
+        changed = False
+        for key, value in kw.items():
+            if value is None:
+                continue
+            if win.get(key) != value:
+                win[key] = value
+                changed = True
+        if changed:
+            self._save()
+
     def as_dict(self) -> dict:
         return {"channel": self.channel, "policyMinutes": self.policy_minutes}

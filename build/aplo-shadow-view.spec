@@ -32,7 +32,7 @@ exe = EXE(
     a.datas,
     [],
     name="AploShadowView",
-    # icon="../backend/assets/icon.ico",  # добавить, когда появится иконка
+    icon="../backend/assets/icon.ico",  # иконка exe (Windows)
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
