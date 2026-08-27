@@ -6,8 +6,10 @@ import { icons } from "./ui/icons";
 import { initModal, isModalOpen, openModal } from "./ui/modal";
 import { initSettings, isSettingsOpen, openSettings, syncPolicy } from "./ui/settings";
 import { toast } from "./ui/toast";
+import { checkUpdateBubble } from "./ui/updateBubble";
 
 const AUTO_REFRESH_MS = 60_000;
+const UPDATE_CHECK_MS = 6 * 60 * 60 * 1000; // проверка обновления раз в 6 часов
 
 type SortMode = "name-asc" | "name-desc" | "status" | "idle";
 
@@ -320,6 +322,10 @@ export async function bootstrap(): Promise<void> {
   bindSearchAndSort();
   await refresh(false);
   paintPolicy(await api.getPolicy());
+
+  const openSettingsHook = { onOpenSettings: openSettings };
+  checkUpdateBubble(openSettingsHook);
+  setInterval(() => checkUpdateBubble(openSettingsHook), UPDATE_CHECK_MS);
 
   setInterval(() => {
     const sec = Math.round((Date.now() - lastRefresh) / 1000);

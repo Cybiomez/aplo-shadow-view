@@ -69,6 +69,16 @@ class Config:
             self._data["policyMinutes"] = value
             self._save()
 
+    # --- какую версию обновления пользователь скрыл («не показывать») ---
+    @property
+    def dismissed_update(self) -> str:
+        return self._data.get("dismissedUpdate", "")
+
+    @dismissed_update.setter
+    def dismissed_update(self, version: str) -> None:
+        self._data["dismissedUpdate"] = version
+        self._save()
+
     # --- геометрия окна (чтобы вставало как оставили) ---
     @property
     def window_state(self) -> dict:

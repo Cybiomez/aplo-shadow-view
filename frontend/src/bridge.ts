@@ -14,6 +14,7 @@ import type {
   Settings,
   ShadowMode,
   UpdateInfo,
+  UpdateNotice,
 } from "./types";
 
 /** Контракт, которым пользуется весь UI. */
@@ -34,6 +35,8 @@ export interface ShadowApi {
   disableEmergency(): Promise<PolicyState>;  // вернуть подтверждение вручную
 
   openLog(): Promise<void>;
+  getUpdateNotification(): Promise<UpdateNotice>;
+  dismissUpdate(version: string): Promise<void>;
   checkUpdate(): Promise<UpdateInfo>;
   applyUpdate(): Promise<ActionResult>;
 }
@@ -56,6 +59,8 @@ class RealApi implements ShadowApi {
   enableEmergency() { return this.api.enable_emergency(); }
   disableEmergency() { return this.api.disable_emergency(); }
   openLog() { return this.api.open_log(); }
+  getUpdateNotification() { return this.api.get_update_notification(); }
+  dismissUpdate(version: string) { return this.api.dismiss_update(version); }
   checkUpdate() { return this.api.check_update(); }
   applyUpdate() { return this.api.apply_update(); }
 }
@@ -115,6 +120,8 @@ class MockApi implements ShadowApi {
   }
 
   openLog() { console.log("(демо) открыть журнал"); return this.wait(undefined); }
+  getUpdateNotification() { return this.wait<UpdateNotice>({ show: true, version: "0.2.0-dev.9", current: "0.1.0", channel: "dev" }); }
+  dismissUpdate(_v: string) { return this.wait(undefined); }
   checkUpdate() {
     const dev = this.settings.channel === "dev";
     return this.wait<UpdateInfo>({

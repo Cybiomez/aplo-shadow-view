@@ -21,6 +21,7 @@ import subprocess
 import sys
 import threading
 import tempfile
+import ssl
 import urllib.request
 import webbrowser
 
@@ -30,6 +31,17 @@ from .version import GITHUB_REPO, VERSION
 _API_RELEASES = f"https://api.github.com/repos/{GITHUB_REPO}/releases"
 _TAG_RE = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.]+))?$")
 _NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
+
+def _ssl_context() -> "ssl.SSLContext":
+    """SSL-контекст с корневыми сертификатами certifi. В собранном PyInstaller-exe
+    системные CA недоступны → используем сертификаты certifi (иначе GitHub по HTTPS
+    отбивается CERTIFICATE_VERIFY_FAILED)."""
+    try:
+        import certifi
+        return ssl.create_default_context(cafile=certifi.where())
+    except Exception:
+        return ssl.create_default_context()
 
 # Имена артефактов из CI (.github/workflows/build.yml).
 _ASSET_BY_PLATFORM = {
@@ -58,7 +70,7 @@ def _is_newer(candidate: str, current: str) -> bool:
 
 def _fetch_releases() -> list[dict]:
     req = urllib.request.Request(_API_RELEASES, headers={"Accept": "application/vnd.github+json"})
-    with urllib.request.urlopen(req, timeout=10) as resp:
+    with urllib.request.urlopen(req, timeout=10, context=_ssl_context()) as resp:
         return json.load(resp)
 
 
@@ -114,7 +126,7 @@ def apply(channel: str) -> dict:
     _ulog(f"apply: канал={channel} версия={info['version']} target={target}")
 
     try:
-        with urllib.request.urlopen(url, timeout=120) as resp, open(new_file, "wb") as out:
+        with urllib.request.urlopen(url, timeout=120, context=_ssl_context()) as resp, open(new_file, "wb") as out:
             shutil.copyfileobj(resp, out)
     except Exception as e:
         _ulog(f"скачивание не удалось: {e}")
