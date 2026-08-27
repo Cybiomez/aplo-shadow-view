@@ -28,12 +28,12 @@ export async function initRegistryModal(h: Hooks): Promise<void> {
       </div>
       <div class="m-body">
         <div class="reg-toolbar">
-          <button class="btn-line" data-add-cluster>Добавить кластер</button>
-          <button class="btn-line" data-add-server>Добавить сервер</button>
-          <div class="grow"></div>
-          <button class="btn-line" data-import>Импорт</button>
-          <button class="btn-line" data-export-all>Экспорт всего</button>
+          <button class="reg-act" data-add-cluster>${icons.folderPlus}<span>Добавить кластер</span></button>
+          <button class="reg-act" data-add-server>${icons.serverPlus}<span>Добавить сервер</span></button>
+          <button class="reg-act" data-import>${icons.download}<span>Импорт из файла</span></button>
+          <button class="reg-act" data-export-all>${icons.upload}<span>Экспорт всего</span></button>
         </div>
+        <div class="reg-note">Сервер — сетевое имя (hostname) в домене. Действия идут под вашей учётной записью администратора. Импорт/экспорт — обмен реестром с коллегами файлом.</div>
         <div class="reg-list" data-reglist></div>
       </div>
     </div>`;
