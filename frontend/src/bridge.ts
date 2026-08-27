@@ -17,6 +17,7 @@ import type {
   UpdateNotice,
   ServerPoll,
   Registry,
+  ServerAuth,
   ImportResult,
 } from "./types";
 
@@ -43,6 +44,15 @@ export interface ShadowApi {
   importRegistry(payload: unknown): Promise<ImportResult>;
   exportFile(kind: string, name?: string): Promise<ActionResult>;
   importFile(): Promise<ImportResult | null>;
+
+  // учётные записи и привязка
+  setProfile(name: string, domain: string, username: string, password: string, kind: string): Promise<Registry>;
+  removeProfile(name: string): Promise<Registry>;
+  setServerAuth(host: string, auth: ServerAuth, password?: string): Promise<Registry>;
+  setClusterProfile(name: string, profile: string): Promise<Registry>;
+  setServerZabbix(host: string, url: string, token: string): Promise<Registry>;
+  setClusterZabbix(name: string, url: string): Promise<Registry>;
+  testServer(host: string): Promise<{ ok: boolean; error: string }>;
 
   getSettings(): Promise<Settings>;
   setChannel(channel: string): Promise<void>;
@@ -85,6 +95,13 @@ class RealApi implements ShadowApi {
   importRegistry(payload: unknown) { return this.api.import_registry(payload); }
   exportFile(kind: string, name = "") { return this.api.export_file(kind, name); }
   importFile() { return this.api.import_file(); }
+  setProfile(name: string, domain: string, username: string, password: string, kind: string) { return this.api.set_profile(name, domain, username, password, kind); }
+  removeProfile(name: string) { return this.api.remove_profile(name); }
+  setServerAuth(host: string, auth: ServerAuth, password = "") { return this.api.set_server_auth(host, auth, password); }
+  setClusterProfile(name: string, profile: string) { return this.api.set_cluster_profile(name, profile); }
+  setServerZabbix(host: string, url: string, token: string) { return this.api.set_server_zabbix(host, url, token); }
+  setClusterZabbix(name: string, url: string) { return this.api.set_cluster_zabbix(name, url); }
+  testServer(host: string) { return this.api.test_server(host); }
   getSettings() { return this.api.get_settings(); }
   setChannel(channel: string) { return this.api.set_channel(channel); }
   setPolicyMinutes(minutes: number) { return this.api.set_policy_minutes(minutes); }
@@ -108,6 +125,8 @@ class MockApi implements ShadowApi {
       { name: "1С-фермы", servers: ["1C-APP-01", "1C-APP-02"] },
     ],
     servers: ["STANDALONE-01"],
+    profiles: [{ name: "Домен-админ", domain: "CORP", username: "admin", kind: "domain" }],
+    serverConfig: {},
   };
   private base: Session[] = [
     { name: "admin", sid: 1, state: "active", idle: "нет", you: true },
@@ -165,6 +184,18 @@ class MockApi implements ShadowApi {
   importRegistry(_payload: unknown) { return this.wait<ImportResult>({ added: { clusters: 0, servers: 0 }, registry: structuredClone(this.registry) }); }
   exportFile(_kind: string, _name = "") { return this.wait<ActionResult>({ ok: true, message: "(демо) экспортировано в файл" }); }
   importFile() { return this.wait<ImportResult | null>({ added: { clusters: 1, servers: 2 }, registry: structuredClone(this.registry) }); }
+  setProfile(name: string, domain: string, username: string, _password: string, kind: string) {
+    const p = this.registry.profiles.find((x) => x.name === name);
+    if (p) { p.domain = domain; p.username = username; p.kind = kind; }
+    else this.registry.profiles.push({ name, domain, username, kind });
+    return this.wait(structuredClone(this.registry));
+  }
+  removeProfile(name: string) { this.registry.profiles = this.registry.profiles.filter((p) => p.name !== name); return this.wait(structuredClone(this.registry)); }
+  setServerAuth(host: string, auth: import("./types").ServerAuth, _password = "") { (this.registry.serverConfig[host] ||= {}).auth = auth; return this.wait(structuredClone(this.registry)); }
+  setClusterProfile(name: string, profile: string) { const c = this.registry.clusters.find((x) => x.name === name); if (c) c.profile = profile; return this.wait(structuredClone(this.registry)); }
+  setServerZabbix(host: string, url: string, token: string) { (this.registry.serverConfig[host] ||= {}).zabbix = { url, configured: !!(url && token) }; return this.wait(structuredClone(this.registry)); }
+  setClusterZabbix(name: string, url: string) { const c = this.registry.clusters.find((x) => x.name === name); if (c) c.zabbix = { url }; return this.wait(structuredClone(this.registry)); }
+  testServer(host: string) { return this.wait({ ok: host !== "TS-03", error: host === "TS-03" ? "недоступен" : "" }, 500); }
 
   getSettings() { return this.wait(this.settings); }
   setChannel(channel: string) { this.settings.channel = channel as Settings["channel"]; return this.wait(undefined); }

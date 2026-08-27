@@ -469,3 +469,22 @@ select.mini {
 /* Загрузка на чипе сервера */
 .sb-load { font-size: 10.5px; font-weight: 600; color: var(--muted); background: var(--surface-2); border-radius: 8px; padding: 1px 6px; margin-left: 2px;
   &.hot { color: var(--crit); background: var(--crit-weak); } }
+
+/* ===== v2: учётные записи и привязка ===== */
+.reg-section { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; }
+.reg-sec-title { font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--faint); margin-bottom: 8px; }
+.reg-profile { display: flex; align-items: center; gap: 9px; padding: 6px 0; }
+.rp-ic { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 7px; background: var(--accent-weak); color: var(--accent); svg { width: 14px; height: 14px; } }
+.rp-name { display: flex; flex-direction: column; b { font-size: 13px; } }
+.rp-login { font-size: 11.5px; color: var(--muted); }
+.reg-cluster-body { display: flex; flex-direction: column; padding: 6px 10px; gap: 2px; }
+.reg-srv-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--border); &:last-child { border-bottom: none; } }
+.rs-name { font-size: 12.5px; color: var(--ink); }
+.rs-auth { flex: none; }
+.auth-sel {
+  font: inherit; font-size: 11.5px; color: var(--ink); background: var(--surface-2);
+  border: 1px solid var(--border-strong); border-radius: 7px; padding: 4px 7px; cursor: pointer; max-width: 150px;
+}
+.reg-foot { margin-top: 12px; }
+.reg-act.wide { width: 100%; grid-column: 1 / -1; }
+.cred-form { display: flex; flex-direction: column; gap: 9px; }

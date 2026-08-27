@@ -12,7 +12,7 @@ from __future__ import annotations
 import socket
 import sys
 
-from . import actions, policy, resources, updater
+from . import actions, credentials, policy, resources, updater
 from .servers import ServerRegistry
 from .config import Config
 from .sessions import list_sessions, probe
@@ -39,6 +39,30 @@ class Api:
     def list_sessions(self, server: str = "") -> list[dict]:
         return list_sessions(server)
 
+    def _apply_creds(self, host: str) -> None:
+        """Положить учётку сервера в Credential Manager перед командами.
+        local — снять явные креды (работаем под текущей учёткой)."""
+        auth = self._registry.resolve_auth(host)
+        mode = auth.get("mode", "local")
+        if mode == "local":
+            credentials.clear_server(host)
+            return
+        if mode == "profile":
+            domain, username = self._registry.profile_login(auth.get("profile", ""))
+            pw = credentials.read_profile(auth.get("profile", "")) or ""
+        else:  # explicit
+            domain, username = auth.get("domain", ""), auth.get("username", "")
+            pw = credentials.read_profile("server:" + host) or ""
+        if username:
+            credentials.apply_server(host, domain, username, pw)
+
+    def _zabbix_for(self, host: str):
+        url = self._registry.resolve_zabbix(host)
+        token = credentials.read_profile("zabbix:" + host) or ""
+        if not url:
+            url, token = self._config.zabbix  # глобальный запасной
+        return url, token
+
     def poll_servers(self, servers: list) -> list:
         """Параллельный опрос ТОЛЬКО переданных серверов (то, что открыто по фильтрам).
         Возвращает список {server, ok, sessions, error, load?}. Один зависший не
@@ -48,12 +72,13 @@ class Api:
         if not names:
             return []
         show = self._config.show_resources
-        zurl, ztok = self._config.zabbix
 
         def enrich(server: str) -> dict:
+            self._apply_creds(server)
             p = probe(server)
             if show and p.get("ok"):
-                p["load"] = resources.server_load(server, zurl, ztok)
+                z_url, z_tok = self._zabbix_for(server)
+                p["load"] = resources.server_load(server, z_url, z_tok)
                 res = resources.session_resources(server)
                 for sess in p.get("sessions", []):
                     r = res.get(str(sess["sid"]))
@@ -165,6 +190,45 @@ class Api:
                 return _json.load(fh)
         except Exception:
             return None
+
+    # --- профили учётных записей и привязка ---
+    def set_profile(self, name: str, domain: str, username: str, password: str, kind: str = "domain") -> dict:
+        self._registry.set_profile(name, domain, username, kind)
+        if password:
+            credentials.write_profile(name, username, password)
+        return self._registry.as_dict()
+
+    def remove_profile(self, name: str) -> dict:
+        self._registry.remove_profile(name)
+        credentials.delete_profile(name)
+        return self._registry.as_dict()
+
+    def set_server_auth(self, host: str, auth: dict, password: str = "") -> dict:
+        self._registry.set_server_auth(host, auth)
+        if auth.get("mode") == "explicit" and password:
+            credentials.write_profile("server:" + host, auth.get("username", ""), password)
+        return self._registry.as_dict()
+
+    def set_cluster_profile(self, name: str, profile: str) -> dict:
+        self._registry.set_cluster_defaults(name, profile=profile)
+        return self._registry.as_dict()
+
+    def set_server_zabbix(self, host: str, url: str, token: str) -> dict:
+        self._registry.set_server_zabbix(host, url, bool(url and token))
+        if token:
+            credentials.write_profile("zabbix:" + host, "", token)
+        return self._registry.as_dict()
+
+    def set_cluster_zabbix(self, name: str, url: str) -> dict:
+        self._registry.set_cluster_defaults(name, zabbix_url=url)
+        return self._registry.as_dict()
+
+    def test_server(self, host: str) -> dict:
+        """Применить креды и проверить доступность (quser). {ok, error}."""
+        self._apply_creds(host)
+        from .sessions import probe
+        p = probe(host)
+        return {"ok": p["ok"], "error": p.get("error", "")}
 
     # --- настройки ---
     def get_settings(self) -> dict:

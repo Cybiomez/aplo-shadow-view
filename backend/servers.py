@@ -39,7 +39,7 @@ def _same(a: str, b: str) -> bool:
 class ServerRegistry:
     def __init__(self) -> None:
         self._file: Path = app_dir() / "registry.json"
-        self._data: dict = {"clusters": [], "servers": []}
+        self._data: dict = {"clusters": [], "servers": [], "profiles": [], "serverConfig": {}}
         self._load()
 
     # ---------- хранилище ----------
@@ -49,6 +49,8 @@ class ServerRegistry:
             raw = json.loads(self._file.read_text(encoding="utf-8"))
             self._data["clusters"] = raw.get("clusters", []) or []
             self._data["servers"] = raw.get("servers", []) or []
+            self._data["profiles"] = raw.get("profiles", []) or []
+            self._data["serverConfig"] = raw.get("serverConfig", {}) or {}
         except (FileNotFoundError, json.JSONDecodeError):
             pass
 
@@ -58,8 +60,12 @@ class ServerRegistry:
         )
 
     def as_dict(self) -> dict:
-        return {"clusters": [dict(c) for c in self._data["clusters"]],
-                "servers": list(self._data["servers"])}
+        return {
+            "clusters": [dict(c) for c in self._data["clusters"]],
+            "servers": list(self._data["servers"]),
+            "profiles": [dict(p) for p in self._data.get("profiles", [])],
+            "serverConfig": dict(self._data.get("serverConfig", {})),
+        }
 
     # ---------- поиск ----------
 
@@ -127,6 +133,94 @@ class ServerRegistry:
             self._data["servers"] = [s for s in self._data["servers"] if not _same(s, name)]
         self._save()
 
+    # ---------- профили учётных записей ----------
+
+    def _profile(self, name: str) -> dict | None:
+        for p in self._data.get("profiles", []):
+            if _same(p.get("name", ""), name):
+                return p
+        return None
+
+    def set_profile(self, name: str, domain: str, username: str, kind: str = "domain") -> None:
+        name = _norm(name)
+        if not name:
+            return
+        p = self._profile(name)
+        data = {"name": name, "domain": domain.strip(), "username": username.strip(), "kind": kind}
+        if p:
+            p.update(data)
+        else:
+            self._data.setdefault("profiles", []).append(data)
+        self._save()
+
+    def remove_profile(self, name: str) -> None:
+        self._data["profiles"] = [p for p in self._data.get("profiles", []) if not _same(p.get("name", ""), name)]
+        # снять профиль с серверов, где он назначен
+        for host, cfg in self._data.get("serverConfig", {}).items():
+            auth = cfg.get("auth", {})
+            if auth.get("mode") == "profile" and _same(auth.get("profile", ""), name):
+                cfg["auth"] = {"mode": "local"}
+        self._save()
+
+    # ---------- конфигурация сервера (auth + zabbix) ----------
+
+    def _server_cfg(self, host: str) -> dict:
+        return self._data.setdefault("serverConfig", {}).setdefault(host, {})
+
+    def set_server_auth(self, host: str, auth: dict) -> None:
+        """auth: {mode: local|profile|explicit, profile?, domain?, username?}."""
+        self._server_cfg(host)["auth"] = auth
+        self._save()
+
+    def set_server_zabbix(self, host: str, url: str, configured: bool) -> None:
+        self._server_cfg(host)["zabbix"] = {"url": url.strip(), "configured": bool(configured)}
+        self._save()
+
+    def set_cluster_defaults(self, name: str, profile: str | None = None,
+                             zabbix_url: str | None = None) -> None:
+        c = self._cluster(name)
+        if not c:
+            return
+        if profile is not None:
+            c["profile"] = profile
+        if zabbix_url is not None:
+            c["zabbix"] = {"url": zabbix_url.strip()}
+        self._save()
+
+    def _cluster_of(self, host: str) -> dict | None:
+        for c in self._data["clusters"]:
+            if any(_same(host, srv) for srv in c.get("servers", [])):
+                return c
+        return None
+
+    def resolve_auth(self, host: str) -> dict:
+        """Итоговая учётка сервера: конфиг сервера → дефолт кластера → локально.
+        Возвращает {mode, profile?, domain?, username?}."""
+        cfg = self._data.get("serverConfig", {}).get(host, {})
+        auth = cfg.get("auth")
+        if auth and auth.get("mode"):
+            return auth
+        c = self._cluster_of(host)
+        if c and c.get("profile"):
+            return {"mode": "profile", "profile": c["profile"]}
+        return {"mode": "local"}
+
+    def resolve_zabbix(self, host: str) -> str:
+        """URL Zabbix для сервера: свой → кластера → пусто."""
+        cfg = self._data.get("serverConfig", {}).get(host, {})
+        z = cfg.get("zabbix", {})
+        if z.get("url"):
+            return z["url"]
+        c = self._cluster_of(host)
+        if c and c.get("zabbix", {}).get("url"):
+            return c["zabbix"]["url"]
+        return ""
+
+    def profile_login(self, name: str) -> tuple[str, str]:
+        """(domain, username) профиля — для применения кредов."""
+        p = self._profile(name)
+        return (p.get("domain", ""), p.get("username", "")) if p else ("", "")
+
     # ---------- экспорт ----------
 
     def export_cluster(self, name: str) -> dict | None:
@@ -140,6 +234,7 @@ class ServerRegistry:
 
     def export_all(self) -> dict:
         d = self.as_dict()
+        # пароли не экспортируем (их и нет в JSON); профили — только логины/домены
         return {"type": FMT_REGISTRY, "version": FMT_VERSION, **d}
 
     # ---------- импорт (слияние без потерь) ----------

@@ -71,10 +71,29 @@ export interface UpdateNotice {
 }
 
 /** Кластер: имя + список серверов. */
-export interface Cluster { name: string; servers: string[]; }
+export interface Cluster { name: string; servers: string[]; profile?: string; zabbix?: { url: string }; }
+
+/** Профиль учётной записи (пароль хранится в Credential Manager, не здесь). */
+export interface Profile { name: string; domain: string; username: string; kind: string; }
+
+/** Учётка сервера. */
+export interface ServerAuth {
+  mode: "local" | "profile" | "explicit";
+  profile?: string;
+  domain?: string;
+  username?: string;
+}
+
+/** Конфигурация сервера в реестре. */
+export interface ServerCfg { auth?: ServerAuth; zabbix?: { url: string; configured: boolean }; }
 
 /** Реестр серверов и кластеров. */
-export interface Registry { clusters: Cluster[]; servers: string[]; }
+export interface Registry {
+  clusters: Cluster[];
+  servers: string[];
+  profiles: Profile[];
+  serverConfig: Record<string, ServerCfg>;
+}
 
 /** Результат опроса одного сервера. */
 export interface ServerPoll {
