@@ -141,7 +141,7 @@ def apply(channel: str) -> dict:
     except Exception as e:
         _ulog(f"замена не удалась: {e}")
         return {"ok": False, "message": f"Не удалось установить: {e}"}
-    return {"ok": True, "message": f"Обновление v{info['version']} загружено — приложение перезапустится"}
+    return {"ok": True, "message": f"Обновление v{info['version']} загружено — приложение закроется и запустится заново"}
 
 
 def _ulog(msg: str) -> None:
@@ -156,70 +156,43 @@ def _ulog(msg: str) -> None:
 
 def _swap_windows(new_file: str, target: str) -> None:
     """
-    Надёжная самозамена без гонки за моментом выхода:
-      1) переименовать РАБОТАЮЩИЙ exe (target -> target.old) — Windows это разрешает,
-         в отличие от перезаписи/удаления запущенного файла;
-      2) сразу положить новый файл на освободившееся имя target;
-         → новая версия уже на месте, даже если помощник дальше споткнётся.
-      3) тихий помощник (без окна) ждёт выхода приложения, удаляет target.old и
-         запускает новый target.
-    Приложение выходит через ~1с, чтобы интерфейс успел показать ответ.
+    Помощник (без окна) ждёт ШТАТНОГО выхода приложения, затем подменяет exe и
+    перезапускает. НЕ переименовываем работающий exe — это ломает проверку
+    родительского процесса в PyInstaller onefile («failed to obtain executable
+    path for parent process»). Файл освобождается, когда приложение закрылось
+    через window.destroy() (см. api.apply_update).
     """
-    old_path = target + ".old"
-    # почистить остаток от прошлого обновления
-    try:
-        if os.path.exists(old_path):
-            os.remove(old_path)
-    except OSError:
-        pass
-
-    # (1)(2) заменить exe на месте, пока приложение ещё работает
-    try:
-        os.replace(target, old_path)      # переименовать запущенный exe
-        os.replace(new_file, target)      # новый на освободившееся имя (тот же том)
-        _ulog("exe заменён на месте (rename-трюк); ждём перезапуска")
-    except Exception as e:
-        _ulog(f"замена на месте не удалась: {e}")
-        # попытка отката, чтобы не остаться без exe
-        try:
-            if not os.path.exists(target) and os.path.exists(old_path):
-                os.replace(old_path, target)
-        except OSError:
-            pass
-        raise
-
-    # (3) тихий помощник: дождаться выхода, убрать .old, запустить новый target
     pid = os.getpid()
     log = str(app_dir() / "update.log")
     bat_path = os.path.join(os.environ.get("TEMP", os.path.dirname(target)), "aplo-shadow-update.bat")
-    exe_name = os.path.basename(target)
-    # onefile-сборка = загрузчик (родитель) + приложение (этот процесс). Гасим оба
-    # по PID (только свои копии — на терминальном сервере чужие не трогаем).
-    ppid = os.getppid() if getattr(sys, "frozen", False) else 0
-    kill_parent = (f'taskkill /PID {ppid} /F >nul 2>&1\r\n') if ppid else ""
     script = (
         "@echo off\r\n"
         f'echo [%date% %time%] helper start pid={pid} >> "{log}"\r\n'
-        "rem дать приложению закрыться самому (os._exit)\r\n"
-        "ping -n 3 127.0.0.1 >nul\r\n"
-        "rem если ещё живо — принудительно завершить ТОЛЬКО свою копию (по PID)\r\n"
-        f'tasklist /FI "PID eq {pid}" 2>nul | find "{pid}" >nul && taskkill /PID {pid} /F >nul 2>&1\r\n'
-        f'{kill_parent}'
-        "ping -n 2 127.0.0.1 >nul\r\n"
-        f'del "{old_path}" >nul 2>&1\r\n'
-        f'echo [%date% %time%] restarting {exe_name} >> "{log}"\r\n'
+        ":wait\r\n"
+        f'tasklist /FI "PID eq {pid}" 2>nul | find "{pid}" >nul\r\n'
+        "if not errorlevel 1 ( ping -n 2 127.0.0.1 >nul & goto wait )\r\n"
+        "set /a n=0\r\n"
+        ":move\r\n"
+        f'move /Y "{new_file}" "{target}" >> "{log}" 2>&1\r\n'
+        "if errorlevel 1 (\r\n"
+        "  set /a n+=1\r\n"
+        "  if %n% lss 30 ( ping -n 2 127.0.0.1 >nul & goto move )\r\n"
+        f'  echo [%date% %time%] MOVE FAILED >> "{log}"\r\n'
+        "  goto done\r\n"
+        ")\r\n"
+        f'echo [%date% %time%] moved OK, restarting >> "{log}"\r\n'
         f'start "" "{target}"\r\n'
+        ":done\r\n"
         'del "%~f0"\r\n'
     )
     with open(bat_path, "w", encoding="cp866", errors="replace") as fh:
         fh.write(script)
-
-    # CREATE_NO_WINDOW — помощник без чёрного окна; переживёт выход приложения
+    _ulog("помощник запущен (скрыто), ждёт штатного выхода приложения")
     flags = (getattr(subprocess, "CREATE_NO_WINDOW", 0)
              | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
     subprocess.Popen(["cmd", "/c", bat_path], creationflags=flags, close_fds=True)
-    _ulog("помощник запущен (скрыто), выход через 1с")
-    threading.Timer(1.0, lambda: os._exit(0)).start()
+    # выход инициирует api.apply_update (window.destroy), не отсюда — чтобы онефайл
+    # закрылся штатно и освободил exe для замены.
 
 
 def _swap_posix(new_file: str, target: str) -> None:

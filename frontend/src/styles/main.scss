@@ -335,7 +335,7 @@ select.mini {
 .serverbar {
   border-bottom: 1px solid var(--border); background: var(--surface-2);
 }
-.sb-top { display: flex; align-items: center; gap: 8px; padding: 8px 14px 0; }
+.sb-top { display: flex; align-items: center; gap: 8px; padding: 9px 14px; }
 .sb-tabs {
   display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; overflow-x: auto;
 }
@@ -419,9 +419,8 @@ select.mini {
 
 /* Кнопки панели реестра — ровные, с иконками */
 .reg-toolbar { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 10px; }
-@media (min-width: 480px) { .reg-toolbar { grid-template-columns: repeat(4, 1fr); } }
 .reg-act {
-  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-width: 0;
   font: inherit; font-size: 12.5px; font-weight: 600; color: var(--accent); white-space: nowrap;
   background: var(--surface); border: 1px solid var(--border-strong); border-radius: 9px;
   padding: 10px 8px; cursor: pointer; transition: background .15s, border-color .15s;
