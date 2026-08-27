@@ -1,11 +1,11 @@
 // Главный экран (v2, мультисервер): панель серверов, список сеансов с колонкой
 // «Сервер», массовые операции, поиск, сортировка. Опрашивается только выбранное.
 import { api } from "./bridge";
-import type { ActionKind, PolicyState, Registry, ServerPoll, Session } from "./types";
+import type { ActionKind, PolicyState, Registry, ServerLoad, ServerPoll, Session } from "./types";
 import { icons } from "./ui/icons";
 import { initModal, isModalOpen, openModal } from "./ui/modal";
 import { initRegistryModal, openRegistry } from "./ui/registryModal";
-import { initServerBar, selectedServers, setRegistry } from "./ui/serverBar";
+import { initServerBar, selectedServers, setLoads, setRegistry } from "./ui/serverBar";
 import { initSettings, isSettingsOpen, openSettings, syncPolicy } from "./ui/settings";
 import { toast } from "./ui/toast";
 import { checkUpdateBubble } from "./ui/updateBubble";
@@ -187,6 +187,18 @@ function hasSelection(): boolean {
   return selectedRows.size > 0;
 }
 
+function fmtMb(mb: number): string {
+  return mb >= 1024 ? `${(mb / 1024).toFixed(1)} ГБ` : `${mb} МБ`;
+}
+function resBadge(r: Row): string {
+  const has = r.cpu_pct != null || r.ram_mb != null;
+  if (!has) return "";
+  const parts: string[] = [];
+  if (r.cpu_pct != null) parts.push(`ЦПУ ${r.cpu_pct}%`);
+  if (r.ram_mb != null) parts.push(`ОЗУ ${fmtMb(r.ram_mb)}`);
+  return `<span class="res">${parts.join(" · ")}</span>`;
+}
+
 function renderList(): void {
   const list = el<HTMLElement>("[data-list]");
   const items = visibleRows();
@@ -215,7 +227,7 @@ function renderList(): void {
         <div class="avatar" aria-hidden="true">${initials(r.name)}</div>
         <div class="who">
           <div class="name">${r.name}${you}</div>
-          <div class="meta">${chip}<span class="sid mono">сеанс ${r.sid}</span><span>простой: ${r.idle}</span></div>
+          <div class="meta">${chip}<span class="sid mono">сеанс ${r.sid}</span><span>простой: ${r.idle}</span>${resBadge(r)}</div>
         </div>
         <div class="server-col mono" title="Сервер">${r.server || "локально"}</div>
         <div class="actions">
@@ -258,10 +270,13 @@ async function refresh(manual: boolean): Promise<void> {
 
   rows = [];
   unreachable = [];
+  const loads: Record<string, ServerLoad> = {};
   for (const p of polls) {
+    if (p.load) loads[p.server] = p.load;
     if (!p.ok) { unreachable.push(p.server); continue; }
     for (const s of p.sessions) rows.push({ ...s, server: p.server });
   }
+  setLoads(loads);
   // подчистить выделение от исчезнувших строк
   const present = new Set(rows.map(rowKey));
   for (const k of [...selectedRows]) if (!present.has(k)) selectedRows.delete(k);

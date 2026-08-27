@@ -12,7 +12,7 @@ from __future__ import annotations
 import socket
 import sys
 
-from . import actions, policy, updater
+from . import actions, policy, resources, updater
 from .servers import ServerRegistry
 from .config import Config
 from .sessions import list_sessions, probe
@@ -40,14 +40,30 @@ class Api:
 
     def poll_servers(self, servers: list) -> list:
         """Параллельный опрос ТОЛЬКО переданных серверов (то, что открыто по фильтрам).
-        Возвращает список {server, ok, sessions, error}. Один зависший не вешает
-        остальных — у каждого свой таймаут (в probe)."""
+        Возвращает список {server, ok, sessions, error, load?}. Один зависший не
+        вешает остальных — у каждого свой таймаут. Если включены ресурсы —
+        добавляет загрузку сервера и ЦПУ/ОЗУ по сеансам (тяжелее)."""
         names = [s for s in (servers or []) if s]
         if not names:
             return []
+        show = self._config.show_resources
+        zurl, ztok = self._config.zabbix
+
+        def enrich(server: str) -> dict:
+            p = probe(server)
+            if show and p.get("ok"):
+                p["load"] = resources.server_load(server, zurl, ztok)
+                res = resources.session_resources(server)
+                for sess in p.get("sessions", []):
+                    r = res.get(str(sess["sid"]))
+                    if r:
+                        sess["ram_mb"] = r.get("ram_mb")
+                        sess["cpu_pct"] = r.get("cpu_pct")
+            return p
+
         from concurrent.futures import ThreadPoolExecutor
         with ThreadPoolExecutor(max_workers=min(8, len(names))) as ex:
-            return list(ex.map(probe, names))
+            return list(ex.map(enrich, names))
 
     def shadow(self, sid: int, mode: str, server: str = "") -> dict:
         return actions.shadow(int(sid), mode, server)
@@ -158,6 +174,12 @@ class Api:
 
     def set_policy_minutes(self, minutes: int) -> None:
         self._config.policy_minutes = int(minutes)
+
+    def set_show_resources(self, value: bool) -> None:
+        self._config.show_resources = bool(value)
+
+    def set_zabbix(self, url: str, token: str) -> None:
+        self._config.set_zabbix(url, token)
 
     # --- политика (экстренный режим) ---
     def get_policy(self, server: str = "") -> dict:

@@ -440,3 +440,17 @@ select.mini {
   &:hover { color: var(--crit); background: var(--crit-weak); } svg { width: 12px; height: 12px; } }
 .reg-empty, .reg-hint { font-size: 12px; color: var(--faint); }
 .reg-hint { padding: 20px; text-align: center; }
+
+/* Текстовые поля в настройках */
+.txt {
+  width: 100%; font: inherit; font-size: 13px; color: var(--ink);
+  background: var(--surface-2); border: 1px solid var(--border-strong); border-radius: 8px; padding: 8px 11px;
+  &::placeholder { color: var(--faint); }
+  &:focus { outline: none; border-color: var(--accent); }
+}
+.zbx-state { font-size: 12px; color: var(--good); align-self: center; }
+/* Ресурсы в строке сеанса */
+.res { color: var(--accent); font-weight: 500; }
+/* Загрузка на чипе сервера */
+.sb-load { font-size: 10.5px; font-weight: 600; color: var(--muted); background: var(--surface-2); border-radius: 8px; padding: 1px 6px; margin-left: 2px;
+  &.hot { color: var(--crit); background: var(--crit-weak); } }

@@ -18,8 +18,11 @@ from pathlib import Path
 APP_DIR_NAME = "AploShadowView"
 
 DEFAULTS = {
-    "channel": "latest",     # latest | dev
-    "policyMinutes": 15,     # 5 | 15 | 30
+    "channel": "latest",       # latest | dev
+    "policyMinutes": 15,       # 5 | 15 | 30
+    "showResources": True,     # показывать ЦПУ/ОЗУ (тяжелее опрос)
+    "zabbixUrl": "",           # http(s)://zabbix/  (пусто = не использовать)
+    "zabbixToken": "",         # API-токен Zabbix
 }
 
 
@@ -69,6 +72,24 @@ class Config:
             self._data["policyMinutes"] = value
             self._save()
 
+    @property
+    def show_resources(self) -> bool:
+        return bool(self._data.get("showResources", True))
+
+    @show_resources.setter
+    def show_resources(self, value: bool) -> None:
+        self._data["showResources"] = bool(value)
+        self._save()
+
+    @property
+    def zabbix(self) -> tuple[str, str]:
+        return self._data.get("zabbixUrl", ""), self._data.get("zabbixToken", "")
+
+    def set_zabbix(self, url: str, token: str) -> None:
+        self._data["zabbixUrl"] = url.strip()
+        self._data["zabbixToken"] = token.strip()
+        self._save()
+
     # --- какую версию обновления пользователь скрыл («не показывать») ---
     @property
     def dismissed_update(self) -> str:
@@ -97,4 +118,11 @@ class Config:
             self._save()
 
     def as_dict(self) -> dict:
-        return {"channel": self.channel, "policyMinutes": self.policy_minutes}
+        url, token = self.zabbix
+        return {
+            "channel": self.channel,
+            "policyMinutes": self.policy_minutes,
+            "showResources": self.show_resources,
+            "zabbixUrl": url,
+            "zabbixConfigured": bool(url and token),
+        }

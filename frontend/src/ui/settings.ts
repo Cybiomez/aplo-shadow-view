@@ -51,6 +51,25 @@ export async function initSettings(a: ShadowApi, h: Hooks): Promise<void> {
           </div>
         </div>
         <div class="sec">
+          <div class="sec-label">Мониторинг ресурсов</div>
+          <div class="set-row">
+            <div class="s-text">
+              <div class="s-title">Показывать ЦПУ и ОЗУ</div>
+              <div class="s-sub">Загрузку серверов и потребление по сеансам. Опрос тяжелее — только для открытого по фильтрам.</div>
+            </div>
+            <label class="switch" title="Показывать ресурсы">
+              <input type="checkbox" data-res role="switch" aria-label="Показывать ресурсы">
+              <span class="track" aria-hidden="true"><span class="thumb"></span></span>
+            </label>
+          </div>
+          <div class="set-row">
+            <div class="s-text"><div class="s-title">Zabbix (источник загрузки серверов)</div><div class="s-sub">Если задан — берём метрики оттуда, не грузим серверы. Пусто — через WMI.</div></div>
+          </div>
+          <div class="set-row"><input type="text" class="txt" data-zbx-url placeholder="http://zabbix/ (URL)" autocomplete="off" spellcheck="false" /></div>
+          <div class="set-row"><input type="password" class="txt" data-zbx-token placeholder="API-токен Zabbix" autocomplete="off" /></div>
+          <div class="set-row"><button class="btn-line" data-zbx-save>Сохранить Zabbix</button><span class="zbx-state" data-zbx-state></span></div>
+        </div>
+        <div class="sec">
           <div class="sec-label">Обновление</div>
           <div class="set-row">
             <div class="s-text"><div class="s-title">Канал обновлений</div><div class="s-sub">latest — стабильные версии, dev — тестовые сборки.</div></div>
@@ -74,11 +93,29 @@ export async function initSettings(a: ShadowApi, h: Hooks): Promise<void> {
   // начальные значения из настроек
   minutesSel().value = String(settings.policyMinutes);
   markChannel(settings.channel);
+  q<HTMLInputElement>("[data-res]").checked = settings.showResources;
+  q<HTMLInputElement>("[data-zbx-url]").value = settings.zabbixUrl || "";
+  q<HTMLElement>("[data-zbx-state]").textContent = settings.zabbixConfigured ? "настроен" : "";
 
   overlay.querySelector("[data-close]")!.addEventListener("click", close);
   overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
 
   q<HTMLElement>("[data-current]").textContent = "v" + (await api.getVersion());
+
+  q<HTMLInputElement>("[data-res]").addEventListener("change", (e) => {
+    const on = (e.target as HTMLInputElement).checked;
+    settings.showResources = on;
+    api.setShowResources(on);
+  });
+  q<HTMLElement>("[data-zbx-save]").addEventListener("click", async () => {
+    const url = q<HTMLInputElement>("[data-zbx-url]").value.trim();
+    const token = q<HTMLInputElement>("[data-zbx-token]").value.trim();
+    await api.setZabbix(url, token);
+    q<HTMLElement>("[data-zbx-state]").textContent = url && (token || settings.zabbixConfigured) ? "настроен" : "не задан";
+    settings.zabbixUrl = url;
+    settings.zabbixConfigured = !!(url && (token || settings.zabbixConfigured));
+    toast("Настройки Zabbix сохранены");
+  });
 
   bindPolicy();
   bindUpdate();

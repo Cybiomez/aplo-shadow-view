@@ -2,6 +2,7 @@
 import { api } from "../bridge";
 import type { Registry } from "../types";
 import { icons } from "./icons";
+import { textPrompt } from "./modal";
 import { toast } from "./toast";
 
 interface Hooks {
@@ -105,12 +106,11 @@ function renderList(): void {
 }
 
 async function addCluster(): Promise<void> {
-  const name = prompt("Имя кластера:");
+  const name = await textPrompt("Новый кластер", "Имя кластера");
   if (name && name.trim()) apply(await api.addCluster(name.trim()));
 }
 async function addServer(cluster: string): Promise<void> {
-  const label = cluster ? `Имя сервера (в кластер «${cluster}»):` : "Имя сервера (вне кластеров):";
-  const name = prompt(label);
+  const name = await textPrompt(cluster ? `Сервер в «${cluster}»` : "Сервер вне кластеров", "Имя сервера");
   if (name && name.trim()) apply(await api.addServer(name.trim(), cluster));
 }
 async function exportFile(kind: string, name: string): Promise<void> {

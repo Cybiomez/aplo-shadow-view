@@ -75,3 +75,28 @@ export function closeModal(): void {
 export function isModalOpen(): boolean {
   return overlay.classList.contains("open");
 }
+
+/** Простой ввод строки (замена window.prompt, который не работает в WebView2). */
+export function textPrompt(title: string, placeholder = ""): Promise<string | null> {
+  return new Promise((resolve) => {
+    const ov = document.createElement("div");
+    ov.className = "overlay overlay-top open";
+    ov.innerHTML = `
+      <div class="modal" role="dialog" aria-modal="true">
+        <div class="m-head"><div class="m-ic accent" aria-hidden="true">${icons.gear}</div><h2>${title}</h2></div>
+        <div class="m-body"><input type="text" class="txt" data-inp placeholder="${placeholder}" autocomplete="off" spellcheck="false" /></div>
+        <div class="m-foot"><button class="mbtn" data-c>Отмена</button><button class="mbtn primary" data-ok>Добавить</button></div>
+      </div>`;
+    document.body.appendChild(ov);
+    const inp = ov.querySelector<HTMLInputElement>("[data-inp]")!;
+    const done = (val: string | null) => { ov.remove(); resolve(val); };
+    ov.querySelector("[data-c]")!.addEventListener("click", () => done(null));
+    ov.querySelector("[data-ok]")!.addEventListener("click", () => done(inp.value.trim() || null));
+    ov.addEventListener("click", (e) => { if (e.target === ov) done(null); });
+    inp.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") done(inp.value.trim() || null);
+      else if (e.key === "Escape") done(null);
+    });
+    inp.focus();
+  });
+}

@@ -47,6 +47,8 @@ export interface ShadowApi {
   getSettings(): Promise<Settings>;
   setChannel(channel: string): Promise<void>;
   setPolicyMinutes(minutes: number): Promise<void>;
+  setShowResources(on: boolean): Promise<void>;
+  setZabbix(url: string, token: string): Promise<void>;
 
   getPolicy(server?: string): Promise<PolicyState>;
   enableEmergency(server?: string): Promise<PolicyState>;
@@ -86,6 +88,8 @@ class RealApi implements ShadowApi {
   getSettings() { return this.api.get_settings(); }
   setChannel(channel: string) { return this.api.set_channel(channel); }
   setPolicyMinutes(minutes: number) { return this.api.set_policy_minutes(minutes); }
+  setShowResources(on: boolean) { return this.api.set_show_resources(on); }
+  setZabbix(url: string, token: string) { return this.api.set_zabbix(url, token); }
   getPolicy(server = "") { return this.api.get_policy(server); }
   enableEmergency(server = "") { return this.api.enable_emergency(server); }
   disableEmergency(server = "") { return this.api.disable_emergency(server); }
@@ -113,7 +117,7 @@ class MockApi implements ShadowApi {
     { name: "a.kozlov", sid: 2, state: "disc", idle: "—", you: false },
     { name: "d.morozov", sid: 6, state: "disc", idle: "5 сут", you: false },
   ];
-  private settings: Settings = { channel: "latest", policyMinutes: 15 };
+  private settings: Settings = { channel: "latest", policyMinutes: 15, showResources: true, zabbixUrl: "", zabbixConfigured: false };
   private policy: PolicyState = { active: false, remaining: 0, minutes: 15 };
   private timer: number | null = null;
 
@@ -132,8 +136,13 @@ class MockApi implements ShadowApi {
       const sessions = this.base.slice(0, 3 + (i % 3)).map((s, j) => ({
         ...s, sid: s.sid + shift * 10, you: false,
         idle: j === 0 ? "нет" : `${(j + i) * 3} мин`,
+        ram_mb: this.settings.showResources ? 120 + j * 260 + i * 40 : undefined,
+        cpu_pct: this.settings.showResources ? (j * 7 + i * 3) % 60 : undefined,
       }));
-      return { server: srv, ok: true, sessions, error: "" };
+      const load = this.settings.showResources
+        ? { cpu: (30 + i * 17) % 95, ram_pct: (45 + i * 13) % 95, source: "demo" }
+        : undefined;
+      return { server: srv, ok: true, sessions, error: "", load };
     });
     return this.wait(polls, 400);
   }
@@ -160,6 +169,8 @@ class MockApi implements ShadowApi {
   getSettings() { return this.wait(this.settings); }
   setChannel(channel: string) { this.settings.channel = channel as Settings["channel"]; return this.wait(undefined); }
   setPolicyMinutes(minutes: number) { this.settings.policyMinutes = minutes; this.policy.minutes = minutes; return this.wait(undefined); }
+  setShowResources(on: boolean) { this.settings.showResources = on; return this.wait(undefined); }
+  setZabbix(url: string, _token: string) { this.settings.zabbixUrl = url; this.settings.zabbixConfigured = !!url; return this.wait(undefined); }
 
   getPolicy(_server = "") { return this.wait(this.policy); }
   enableEmergency(_server = "") {
