@@ -66,6 +66,8 @@ def _use_bundled_webview2() -> None:
 
 def main() -> None:
     _use_bundled_webview2()
+    from . import updater
+    updater.cleanup_leftovers()
     try:
         import webview
     except ImportError as e:
