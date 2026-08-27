@@ -335,10 +335,11 @@ select.mini {
 .serverbar {
   border-bottom: 1px solid var(--border); background: var(--surface-2);
 }
+.sb-top { display: flex; align-items: center; gap: 8px; padding: 8px 14px 0; }
 .sb-tabs {
-  display: flex; align-items: center; gap: 6px; padding: 8px 14px 0; overflow-x: auto;
-  .grow { flex: 1; }
+  display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; overflow-x: auto;
 }
+.sb-empty-tabs { font-size: 12.5px; color: var(--faint); padding: 6px 2px; }
 .sb-tab {
   display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
   font: inherit; font-size: 12.5px; font-weight: 600; color: var(--muted);
@@ -352,6 +353,7 @@ select.mini {
   border-radius: 10px; padding: 1px 6px; min-width: 16px; text-align: center;
 }
 .sb-manage {
+  flex: none;
   display: inline-flex; align-items: center; gap: 6px;
   font: inherit; font-size: 12px; font-weight: 600; color: var(--muted);
   background: var(--surface); border: 1px solid var(--border-strong); padding: 6px 11px; border-radius: 8px; cursor: pointer;
@@ -414,8 +416,22 @@ select.mini {
 .act:disabled { opacity: .4; cursor: default; }
 .act:disabled:hover { border-color: transparent; }
 
+
+/* Кнопки панели реестра — ровные, с иконками */
+.reg-toolbar { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 10px; }
+@media (min-width: 480px) { .reg-toolbar { grid-template-columns: repeat(4, 1fr); } }
+.reg-act {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  font: inherit; font-size: 12.5px; font-weight: 600; color: var(--accent); white-space: nowrap;
+  background: var(--surface); border: 1px solid var(--border-strong); border-radius: 9px;
+  padding: 10px 8px; cursor: pointer; transition: background .15s, border-color .15s;
+  &:hover { background: var(--accent-weak); border-color: var(--accent); }
+  svg { width: 15px; height: 15px; flex: none; }
+  span { overflow: hidden; text-overflow: ellipsis; }
+}
+.reg-note { font-size: 12px; color: var(--muted); line-height: 1.45; margin-bottom: 14px; }
+
 /* Управление реестром */
-.reg-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; .grow { flex: 1; } }
 .reg-list { display: flex; flex-direction: column; gap: 12px; max-height: 52vh; overflow-y: auto; }
 .reg-cluster { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
 .reg-cluster-head {
