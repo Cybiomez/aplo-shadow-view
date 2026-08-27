@@ -11,7 +11,8 @@ import { checkUpdateBubble } from "./ui/updateBubble";
 const AUTO_REFRESH_MS = 60_000;
 const UPDATE_CHECK_MS = 6 * 60 * 60 * 1000; // проверка обновления раз в 6 часов
 
-type SortMode = "name-asc" | "name-desc" | "status" | "idle";
+type SortField = "name" | "status" | "idle";
+type SortDir = "asc" | "desc";
 
 interface ActionDef {
   title: string;
@@ -57,7 +58,8 @@ const ACTIONS: Record<ActionKind, ActionDef> = {
 
 let sessions: Session[] = [];
 let searchQuery = "";
-let sortMode: SortMode = "name-asc";
+let sortField: SortField = "name";
+let sortDir: SortDir = "asc";
 let lastRefresh = Date.now();
 let policyTicker: number | null = null;
 
@@ -85,15 +87,20 @@ function parseIdle(idle: string): number {
   return Number.MAX_SAFE_INTEGER;
 }
 
+function cmp(a: Session, b: Session): number {
+  switch (sortField) {
+    case "name": return a.name.localeCompare(b.name, "ru");
+    case "status": return (a.state === "active" ? 0 : 1) - (b.state === "active" ? 0 : 1);
+    case "idle": return parseIdle(a.idle) - parseIdle(b.idle);
+  }
+}
+
 function visibleSessions(): Session[] {
   const q = searchQuery.trim().toLowerCase();
-  let list = q ? sessions.filter((s) => s.name.toLowerCase().includes(q)) : sessions.slice();
-  switch (sortMode) {
-    case "name-asc": list.sort((a, b) => a.name.localeCompare(b.name, "ru")); break;
-    case "name-desc": list.sort((a, b) => b.name.localeCompare(a.name, "ru")); break;
-    case "status": list.sort((a, b) => (a.state === b.state ? 0 : a.state === "active" ? -1 : 1)); break;
-    case "idle": list.sort((a, b) => parseIdle(a.idle) - parseIdle(b.idle)); break;
-  }
+  const list = q ? sessions.filter((s) => s.name.toLowerCase().includes(q)) : sessions.slice();
+  const sign = sortDir === "asc" ? 1 : -1;
+  // вторичная сортировка по имени — чтобы порядок был стабильным при равных значениях
+  list.sort((a, b) => sign * cmp(a, b) || a.name.localeCompare(b.name, "ru"));
   return list;
 }
 
@@ -135,15 +142,11 @@ function template(): string {
         <input type="text" data-search placeholder="Поиск по имени…" aria-label="Поиск пользователя" autocomplete="off" spellcheck="false" />
         <button class="s-clear" data-search-clear title="Очистить" aria-label="Очистить" style="display:none">${icons.close}</button>
       </div>
-      <label class="sort">
-        <span class="sr-only">Сортировка</span>
-        <select data-sort aria-label="Сортировка">
-          <option value="name-asc">Имя: А–Я</option>
-          <option value="name-desc">Имя: Я–А</option>
-          <option value="status">По статусу</option>
-          <option value="idle">По простою</option>
-        </select>
-      </label>
+      <div class="sort-toggles" role="group" aria-label="Сортировка">
+        <button class="sort-tg" data-field="name">Имя<span class="dir" aria-hidden="true"></span></button>
+        <button class="sort-tg" data-field="status">Статус<span class="dir" aria-hidden="true"></span></button>
+        <button class="sort-tg" data-field="idle">Простой<span class="dir" aria-hidden="true"></span></button>
+      </div>
     </div>
 
     <div class="list" data-list></div>
@@ -242,6 +245,17 @@ function clearSearch(): void {
   searchInput().focus();
 }
 
+function updateSortToggles(): void {
+  document.querySelectorAll<HTMLButtonElement>(".sort-tg").forEach((btn) => {
+    const active = btn.dataset.field === sortField;
+    btn.classList.toggle("active", active);
+    const dir = btn.querySelector(".dir")!;
+    dir.innerHTML = active ? (sortDir === "asc" ? icons.arrowUp : icons.arrowDown) : "";
+    if (active) btn.setAttribute("aria-pressed", "true");
+    else btn.removeAttribute("aria-pressed");
+  });
+}
+
 function bindSearchAndSort(): void {
   const input = searchInput();
   input.addEventListener("input", applySearch);
@@ -251,10 +265,20 @@ function bindSearchAndSort(): void {
   });
   el<HTMLElement>("[data-search-clear]").addEventListener("click", clearSearch);
 
-  el<HTMLSelectElement>("[data-sort]").addEventListener("change", (e) => {
-    sortMode = (e.target as HTMLSelectElement).value as SortMode;
-    renderList();
+  document.querySelectorAll<HTMLButtonElement>(".sort-tg").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const field = btn.dataset.field as SortField;
+      if (field === sortField) {
+        sortDir = sortDir === "asc" ? "desc" : "asc"; // повторный клик — переворот
+      } else {
+        sortField = field;
+        sortDir = "asc";
+      }
+      updateSortToggles();
+      renderList();
+    });
   });
+  updateSortToggles();
 
   // Печать при активном окне — сразу в поиск (type-to-search)
   document.addEventListener("keydown", (e) => {
