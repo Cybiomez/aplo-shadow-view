@@ -12,15 +12,17 @@ from __future__ import annotations
 import socket
 import sys
 
-from . import actions, policy, updater
+from . import actions, policy, resources, updater
+from .servers import ServerRegistry
 from .config import Config
-from .sessions import list_sessions
+from .sessions import list_sessions, probe
 from .version import VERSION
 
 
 class Api:
     def __init__(self, config: Config) -> None:
         self._config = config
+        self._registry = ServerRegistry()
 
     # --- информация ---
     def get_server_name(self) -> str:
@@ -33,17 +35,135 @@ class Api:
         return VERSION
 
     # --- сеансы ---
-    def list_sessions(self) -> list[dict]:
-        return list_sessions()
+    def list_sessions(self, server: str = "") -> list[dict]:
+        return list_sessions(server)
 
-    def shadow(self, sid: int, mode: str) -> dict:
-        return actions.shadow(int(sid), mode)
+    def poll_servers(self, servers: list) -> list:
+        """Параллельный опрос ТОЛЬКО переданных серверов (то, что открыто по фильтрам).
+        Возвращает список {server, ok, sessions, error, load?}. Один зависший не
+        вешает остальных — у каждого свой таймаут. Если включены ресурсы —
+        добавляет загрузку сервера и ЦПУ/ОЗУ по сеансам (тяжелее)."""
+        names = [s for s in (servers or []) if s]
+        if not names:
+            return []
+        show = self._config.show_resources
+        zurl, ztok = self._config.zabbix
 
-    def disconnect(self, sid: int) -> dict:
-        return actions.disconnect(int(sid))
+        def enrich(server: str) -> dict:
+            p = probe(server)
+            if show and p.get("ok"):
+                p["load"] = resources.server_load(server, zurl, ztok)
+                res = resources.session_resources(server)
+                for sess in p.get("sessions", []):
+                    r = res.get(str(sess["sid"]))
+                    if r:
+                        sess["ram_mb"] = r.get("ram_mb")
+                        sess["cpu_pct"] = r.get("cpu_pct")
+            return p
 
-    def logoff(self, sid: int) -> dict:
-        return actions.logoff(int(sid))
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=min(8, len(names))) as ex:
+            return list(ex.map(enrich, names))
+
+    def shadow(self, sid: int, mode: str, server: str = "") -> dict:
+        return actions.shadow(int(sid), mode, server)
+
+    def disconnect(self, sid: int, server: str = "") -> dict:
+        return actions.disconnect(int(sid), server)
+
+    def logoff(self, sid: int, server: str = "") -> dict:
+        return actions.logoff(int(sid), server)
+
+    # --- реестр серверов и кластеров ---
+    def get_registry(self) -> dict:
+        return self._registry.as_dict()
+
+    def add_cluster(self, name: str) -> dict:
+        self._registry.add_cluster(name); return self._registry.as_dict()
+
+    def remove_cluster(self, name: str) -> dict:
+        self._registry.remove_cluster(name); return self._registry.as_dict()
+
+    def rename_cluster(self, old: str, new: str) -> dict:
+        self._registry.rename_cluster(old, new); return self._registry.as_dict()
+
+    def add_server(self, name: str, cluster: str = "") -> dict:
+        self._registry.add_server(name, cluster); return self._registry.as_dict()
+
+    def remove_server(self, name: str, cluster: str = "") -> dict:
+        self._registry.remove_server(name, cluster); return self._registry.as_dict()
+
+    def export_cluster(self, name: str) -> dict | None:
+        return self._registry.export_cluster(name)
+
+    def export_server(self, name: str) -> dict:
+        return self._registry.export_server(name)
+
+    def export_registry(self) -> dict:
+        return self._registry.export_all()
+
+    def import_registry(self, payload: dict) -> dict:
+        added = self._registry.import_data(payload)
+        return {"added": added, "registry": self._registry.as_dict()}
+
+    # --- импорт/экспорт файлом (диалоги pywebview) ---
+    def export_file(self, kind: str, name: str = "") -> dict:
+        """kind: cluster | server | registry. Открывает диалог сохранения."""
+        if kind == "cluster":
+            payload = self._registry.export_cluster(name)
+            suggested = f"{name}.asvcluster"
+        elif kind == "server":
+            payload = self._registry.export_server(name)
+            suggested = f"{name}.asvserver"
+        else:
+            payload = self._registry.export_all()
+            suggested = "aploshadowview-registry.json"
+        if payload is None:
+            return {"ok": False, "message": "Нечего экспортировать"}
+        return self._save_dialog(payload, suggested)
+
+    def import_file(self) -> dict | None:
+        data = self._open_dialog()
+        if data is None:
+            return None
+        try:
+            added = self._registry.import_data(data)
+        except ValueError as e:
+            return {"error": str(e)}
+        return {"added": added, "registry": self._registry.as_dict()}
+
+    def _save_dialog(self, payload: dict, suggested: str) -> dict:
+        try:
+            import json as _json
+            import webview
+            win = webview.active_window()
+            if win is None:
+                return {"ok": False, "message": "Нет активного окна"}
+            path = win.create_file_dialog(webview.SAVE_DIALOG, save_filename=suggested)
+            if not path:
+                return {"ok": False, "message": "Отменено"}
+            target = path if isinstance(path, str) else path[0]
+            with open(target, "w", encoding="utf-8") as fh:
+                _json.dump(payload, fh, ensure_ascii=False, indent=2)
+            return {"ok": True, "message": f"Сохранено: {target}"}
+        except Exception as e:
+            return {"ok": False, "message": f"Ошибка экспорта: {e}"}
+
+    def _open_dialog(self) -> dict | None:
+        try:
+            import json as _json
+            import webview
+            win = webview.active_window()
+            if win is None:
+                return None
+            paths = win.create_file_dialog(webview.OPEN_DIALOG, allow_multiple=False)
+            if not paths:
+                return None
+            src = paths[0] if isinstance(paths, (list, tuple)) else paths
+            with open(src, "r", encoding="utf-8") as fh:
+                return _json.load(fh)
+        except Exception:
+            return None
 
     # --- настройки ---
     def get_settings(self) -> dict:
@@ -55,15 +175,21 @@ class Api:
     def set_policy_minutes(self, minutes: int) -> None:
         self._config.policy_minutes = int(minutes)
 
+    def set_show_resources(self, value: bool) -> None:
+        self._config.show_resources = bool(value)
+
+    def set_zabbix(self, url: str, token: str) -> None:
+        self._config.set_zabbix(url, token)
+
     # --- политика (экстренный режим) ---
-    def get_policy(self) -> dict:
-        return policy.get_policy()
+    def get_policy(self, server: str = "") -> dict:
+        return policy.get_policy(server)
 
-    def enable_emergency(self) -> dict:
-        return policy.enable_emergency(self._config.policy_minutes)
+    def enable_emergency(self, server: str = "") -> dict:
+        return policy.enable_emergency(self._config.policy_minutes, server)
 
-    def disable_emergency(self) -> dict:
-        return policy.disable_emergency()
+    def disable_emergency(self, server: str = "") -> dict:
+        return policy.disable_emergency(server)
 
     # --- журнал ---
     def open_log(self) -> None:

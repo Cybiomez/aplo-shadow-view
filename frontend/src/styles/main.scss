@@ -328,3 +328,129 @@ select.mini {
   .act { padding: 8px; }
   .who .meta .sid { display: none; }
 }
+
+/* ===== v2: мультисервер ===== */
+
+/* Панель серверов */
+.serverbar {
+  border-bottom: 1px solid var(--border); background: var(--surface-2);
+}
+.sb-tabs {
+  display: flex; align-items: center; gap: 6px; padding: 8px 14px 0; overflow-x: auto;
+  .grow { flex: 1; }
+}
+.sb-tab {
+  display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+  font: inherit; font-size: 12.5px; font-weight: 600; color: var(--muted);
+  background: transparent; border: 1px solid transparent; border-bottom: none;
+  padding: 7px 12px; border-radius: 8px 8px 0 0; cursor: pointer; transition: background .15s, color .15s;
+  &:hover { color: var(--ink); background: var(--surface); }
+  &.on { color: var(--accent); background: var(--surface); border-color: var(--border); }
+}
+.sb-badge {
+  font-size: 10.5px; font-weight: 700; background: var(--accent); color: var(--accent-ink);
+  border-radius: 10px; padding: 1px 6px; min-width: 16px; text-align: center;
+}
+.sb-manage {
+  display: inline-flex; align-items: center; gap: 6px;
+  font: inherit; font-size: 12px; font-weight: 600; color: var(--muted);
+  background: var(--surface); border: 1px solid var(--border-strong); padding: 6px 11px; border-radius: 8px; cursor: pointer;
+  &:hover { color: var(--accent); border-color: var(--accent); }
+  svg { width: 14px; height: 14px; }
+}
+.sb-servers {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 7px; padding: 10px 14px;
+  border-top: 1px solid var(--border);
+}
+.sb-chip {
+  display: inline-flex; align-items: center; gap: 7px; cursor: pointer;
+  font-size: 12.5px; color: var(--ink); background: var(--surface);
+  border: 1px solid var(--border-strong); padding: 5px 11px; border-radius: 16px; transition: border-color .15s, background .15s;
+  input { margin: 0; cursor: pointer; accent-color: var(--accent); }
+  &.on { border-color: var(--accent); background: var(--accent-weak); color: var(--accent); font-weight: 600; }
+}
+.sb-mini {
+  font: inherit; font-size: 12px; font-weight: 600; color: var(--muted);
+  background: transparent; border: 1px dashed var(--border-strong); padding: 5px 10px; border-radius: 16px; cursor: pointer;
+  &:hover { color: var(--accent); border-color: var(--accent); }
+}
+.sb-hint { font-size: 12.5px; color: var(--faint); padding: 2px 0; }
+
+/* Недоступные серверы в тулбаре */
+.unreach { font-size: 12px; color: var(--crit); margin-left: 8px; }
+
+/* Колонка сервера в строке */
+.server-col {
+  flex: none; font-size: 12px; color: var(--muted); background: var(--surface-2);
+  border: 1px solid var(--border); border-radius: 7px; padding: 4px 9px; white-space: nowrap; max-width: 160px; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* Чекбокс выделения строки */
+.rowcheck { display: grid; place-items: center; flex: none; cursor: pointer;
+  input { width: 16px; height: 16px; margin: 0; cursor: pointer; accent-color: var(--accent); }
+}
+.row.selected { border-color: var(--accent); background: var(--accent-weak); }
+
+/* Массовая панель */
+.massbar {
+  display: none; align-items: center; gap: 10px; padding: 9px 18px;
+  border-bottom: 1px solid var(--accent); background: var(--accent-weak);
+  &.show { display: flex; }
+  .mb-count { font-size: 12.5px; color: var(--accent); font-weight: 600; }
+  .grow { flex: 1; }
+}
+.mb-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  font: inherit; font-size: 12px; font-weight: 600; color: var(--warn);
+  background: var(--surface); border: 1px solid var(--warn); padding: 6px 11px; border-radius: 8px; cursor: pointer;
+  transition: background .15s, color .15s;
+  svg { width: 14px; height: 14px; }
+  &:hover { background: var(--warn); color: var(--surface); }
+  &.crit { color: var(--crit); border-color: var(--crit); &:hover { background: var(--crit); color: #fff; } }
+  &.ghost { color: var(--muted); border-color: var(--border-strong); &:hover { color: var(--ink); background: var(--surface-2); } }
+}
+
+/* Действие-кнопка в disabled (при выделении) */
+.act:disabled { opacity: .4; cursor: default; }
+.act:disabled:hover { border-color: transparent; }
+
+/* Управление реестром */
+.reg-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; .grow { flex: 1; } }
+.reg-list { display: flex; flex-direction: column; gap: 12px; max-height: 52vh; overflow-y: auto; }
+.reg-cluster { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.reg-cluster-head {
+  display: flex; align-items: center; gap: 9px; padding: 10px 12px; background: var(--surface-2);
+  b { font-size: 13.5px; }
+  .grow { flex: 1; }
+}
+.reg-count { font-size: 11px; font-weight: 700; color: var(--faint); background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1px 7px; }
+.reg-mini {
+  font: inherit; font-size: 11.5px; font-weight: 600; color: var(--muted);
+  background: var(--surface); border: 1px solid var(--border-strong); padding: 4px 9px; border-radius: 7px; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 4px;
+  &:hover { color: var(--accent); border-color: var(--accent); }
+  &.danger { color: var(--crit); &:hover { border-color: var(--crit); } svg { width: 12px; height: 12px; } }
+}
+.reg-servers { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 12px; }
+.reg-srv {
+  display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink);
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 14px; padding: 4px 6px 4px 11px;
+}
+.reg-x { display: grid; place-items: center; border: none; background: transparent; color: var(--faint); cursor: pointer; padding: 2px; border-radius: 50%;
+  &:hover { color: var(--crit); background: var(--crit-weak); } svg { width: 12px; height: 12px; } }
+.reg-empty, .reg-hint { font-size: 12px; color: var(--faint); }
+.reg-hint { padding: 20px; text-align: center; }
+
+/* Текстовые поля в настройках */
+.txt {
+  width: 100%; font: inherit; font-size: 13px; color: var(--ink);
+  background: var(--surface-2); border: 1px solid var(--border-strong); border-radius: 8px; padding: 8px 11px;
+  &::placeholder { color: var(--faint); }
+  &:focus { outline: none; border-color: var(--accent); }
+}
+.zbx-state { font-size: 12px; color: var(--good); align-self: center; }
+/* Ресурсы в строке сеанса */
+.res { color: var(--accent); font-weight: 500; }
+/* Загрузка на чипе сервера */
+.sb-load { font-size: 10.5px; font-weight: 600; color: var(--muted); background: var(--surface-2); border-radius: 8px; padding: 1px 6px; margin-left: 2px;
+  &.hot { color: var(--crit); background: var(--crit-weak); } }
