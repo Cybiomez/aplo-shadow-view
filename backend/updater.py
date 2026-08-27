@@ -156,48 +156,75 @@ def _ulog(msg: str) -> None:
 
 def _swap_windows(new_file: str, target: str) -> None:
     """
-    Помощник .bat ждёт выхода приложения (по PID), затем с повторами подменяет exe
-    и перезапускает. Замена с повторами — потому что запущенный exe залочен, файл
-    освобождается не мгновенно. Всё пишется в update.log рядом с настройками.
-    Приложение завершается не сразу, а через ~1.2с — чтобы интерфейс успел показать
-    ответ, а bridge-вызов корректно вернулся.
+    Надёжная самозамена без гонки за моментом выхода:
+      1) переименовать РАБОТАЮЩИЙ exe (target -> target.old) — Windows это разрешает,
+         в отличие от перезаписи/удаления запущенного файла;
+      2) сразу положить новый файл на освободившееся имя target;
+         → новая версия уже на месте, даже если помощник дальше споткнётся.
+      3) тихий помощник (без окна) ждёт выхода приложения, удаляет target.old и
+         запускает новый target.
+    Приложение выходит через ~1с, чтобы интерфейс успел показать ответ.
     """
+    old_path = target + ".old"
+    # почистить остаток от прошлого обновления
+    try:
+        if os.path.exists(old_path):
+            os.remove(old_path)
+    except OSError:
+        pass
+
+    # (1)(2) заменить exe на месте, пока приложение ещё работает
+    try:
+        os.replace(target, old_path)      # переименовать запущенный exe
+        os.replace(new_file, target)      # новый на освободившееся имя (тот же том)
+        _ulog("exe заменён на месте (rename-трюк); ждём перезапуска")
+    except Exception as e:
+        _ulog(f"замена на месте не удалась: {e}")
+        # попытка отката, чтобы не остаться без exe
+        try:
+            if not os.path.exists(target) and os.path.exists(old_path):
+                os.replace(old_path, target)
+        except OSError:
+            pass
+        raise
+
+    # (3) тихий помощник: дождаться выхода, убрать .old, запустить новый target
     pid = os.getpid()
     log = str(app_dir() / "update.log")
     bat_path = os.path.join(os.environ.get("TEMP", os.path.dirname(target)), "aplo-shadow-update.bat")
-
     script = (
         "@echo off\r\n"
         f'echo [%date% %time%] helper start pid={pid} >> "{log}"\r\n'
         ":wait\r\n"
         f'tasklist /FI "PID eq {pid}" 2>nul | find "{pid}" >nul\r\n'
         "if not errorlevel 1 ( ping -n 2 127.0.0.1 >nul & goto wait )\r\n"
-        f'echo [%date% %time%] app exited, swapping >> "{log}"\r\n'
-        "set /a n=0\r\n"
-        ":move\r\n"
-        f'move /Y "{new_file}" "{target}" >> "{log}" 2>&1\r\n'
-        "if errorlevel 1 (\r\n"
-        "  set /a n+=1\r\n"
-        f'  if %n% lss 20 ( ping -n 2 127.0.0.1 >nul & goto move )\r\n'
-        f'  echo [%date% %time%] MOVE FAILED after retries >> "{log}"\r\n'
-        "  goto done\r\n"
-        ")\r\n"
-        f'echo [%date% %time%] moved OK, restarting >> "{log}"\r\n'
+        f'del "{old_path}" >nul 2>&1\r\n'
+        f'echo [%date% %time%] restarting >> "{log}"\r\n'
         f'start "" "{target}"\r\n'
-        ":done\r\n"
         'del "%~f0"\r\n'
     )
     with open(bat_path, "w", encoding="cp866", errors="replace") as fh:
         fh.write(script)
-    _ulog(f"помощник записан: {bat_path}, запуск, отложенный выход через 1.2с")
 
-    flags = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+    # CREATE_NO_WINDOW — помощник без чёрного окна; переживёт выход приложения
+    flags = (getattr(subprocess, "CREATE_NO_WINDOW", 0)
+             | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
     subprocess.Popen(["cmd", "/c", bat_path], creationflags=flags, close_fds=True)
-    # выходим с задержкой: bridge-вызов успевает вернуть ответ в интерфейс
-    threading.Timer(1.2, lambda: os._exit(0)).start()
+    _ulog("помощник запущен (скрыто), выход через 1с")
+    threading.Timer(1.0, lambda: os._exit(0)).start()
 
 
 def _swap_posix(new_file: str, target: str) -> None:
     os.replace(new_file, target)
     os.chmod(target, 0o755)
     os.execv(target, [target])
+
+
+def cleanup_leftovers() -> None:
+    """Убрать остаток прошлого обновления (exe.old рядом) — вызывать при старте."""
+    try:
+        old = os.path.abspath(sys.executable) + ".old"
+        if os.path.exists(old):
+            os.remove(old)
+    except OSError:
+        pass
