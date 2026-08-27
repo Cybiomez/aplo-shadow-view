@@ -16,12 +16,15 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
+import threading
 import tempfile
 import urllib.request
 import webbrowser
 
+from .config import app_dir
 from .version import GITHUB_REPO, VERSION
 
 _API_RELEASES = f"https://api.github.com/repos/{GITHUB_REPO}/releases"
@@ -106,41 +109,80 @@ def apply(channel: str) -> dict:
         webbrowser.open(rel.get("html_url", f"https://github.com/{GITHUB_REPO}/releases"))
         return {"ok": False, "message": "Нет сборки под эту ОС — открыта страница релизов"}
 
-    try:
-        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".download")
-        with urllib.request.urlopen(url, timeout=60) as resp:
-            tmp.write(resp.read())
-        tmp.close()
-    except Exception as e:
-        return {"ok": False, "message": f"Не удалось скачать: {e}"}
+    target = os.path.abspath(sys.executable)  # для onefile — сам exe
+    new_file = target + ".new"
+    _ulog(f"apply: канал={channel} версия={info['version']} target={target}")
 
-    target = sys.executable  # для onefile-сборки это и есть наш exe
+    try:
+        with urllib.request.urlopen(url, timeout=120) as resp, open(new_file, "wb") as out:
+            shutil.copyfileobj(resp, out)
+    except Exception as e:
+        _ulog(f"скачивание не удалось: {e}")
+        return {"ok": False, "message": f"Не удалось скачать: {e}"}
+    _ulog(f"скачано: {new_file} ({os.path.getsize(new_file)} байт)")
+
     try:
         if sys.platform == "win32":
-            _swap_windows(tmp.name, target)
+            _swap_windows(new_file, target)
         else:
-            _swap_posix(tmp.name, target)
+            _swap_posix(new_file, target)
     except Exception as e:
+        _ulog(f"замена не удалась: {e}")
         return {"ok": False, "message": f"Не удалось установить: {e}"}
-    return {"ok": True, "message": f"Обновление v{info['version']} установлено — перезапуск"}
+    return {"ok": True, "message": f"Обновление v{info['version']} загружено — приложение перезапустится"}
+
+
+def _ulog(msg: str) -> None:
+    """Пошаговый лог обновления — чтобы диагностировать на живой машине."""
+    from datetime import datetime
+    try:
+        with (app_dir() / "update.log").open("a", encoding="utf-8") as fh:
+            fh.write(f"{datetime.now():%Y-%m-%d %H:%M:%S}  {msg}\n")
+    except OSError:
+        pass
 
 
 def _swap_windows(new_file: str, target: str) -> None:
-    # Помощник ждёт выхода приложения (по PID), подменяет exe и перезапускает.
+    """
+    Помощник .bat ждёт выхода приложения (по PID), затем с повторами подменяет exe
+    и перезапускает. Замена с повторами — потому что запущенный exe залочен, файл
+    освобождается не мгновенно. Всё пишется в update.log рядом с настройками.
+    Приложение завершается не сразу, а через ~1.2с — чтобы интерфейс успел показать
+    ответ, а bridge-вызов корректно вернулся.
+    """
     pid = os.getpid()
-    helper = tempfile.NamedTemporaryFile(delete=False, suffix=".cmd", mode="w", encoding="cp866")
-    helper.write(
+    log = str(app_dir() / "update.log")
+    bat_path = os.path.join(os.environ.get("TEMP", os.path.dirname(target)), "aplo-shadow-update.bat")
+
+    script = (
         "@echo off\r\n"
-        f":wait\r\n"
-        f"tasklist /FI \"PID eq {pid}\" | find \"{pid}\" >nul && (ping -n 2 127.0.0.1 >nul & goto wait)\r\n"
-        f"move /Y \"{new_file}\" \"{target}\" >nul\r\n"
-        f"start \"\" \"{target}\"\r\n"
-        f"del \"%~f0\"\r\n"
+        f'echo [%date% %time%] helper start pid={pid} >> "{log}"\r\n'
+        ":wait\r\n"
+        f'tasklist /FI "PID eq {pid}" 2>nul | find "{pid}" >nul\r\n'
+        "if not errorlevel 1 ( ping -n 2 127.0.0.1 >nul & goto wait )\r\n"
+        f'echo [%date% %time%] app exited, swapping >> "{log}"\r\n'
+        "set /a n=0\r\n"
+        ":move\r\n"
+        f'move /Y "{new_file}" "{target}" >> "{log}" 2>&1\r\n'
+        "if errorlevel 1 (\r\n"
+        "  set /a n+=1\r\n"
+        f'  if %n% lss 20 ( ping -n 2 127.0.0.1 >nul & goto move )\r\n'
+        f'  echo [%date% %time%] MOVE FAILED after retries >> "{log}"\r\n'
+        "  goto done\r\n"
+        ")\r\n"
+        f'echo [%date% %time%] moved OK, restarting >> "{log}"\r\n'
+        f'start "" "{target}"\r\n'
+        ":done\r\n"
+        'del "%~f0"\r\n'
     )
-    helper.close()
-    subprocess.Popen(["cmd", "/c", helper.name], creationflags=getattr(subprocess, "DETACHED_PROCESS", 0))
-    # приложение сейчас завершится — помощник дождётся и заменит файл
-    os._exit(0)
+    with open(bat_path, "w", encoding="cp866", errors="replace") as fh:
+        fh.write(script)
+    _ulog(f"помощник записан: {bat_path}, запуск, отложенный выход через 1.2с")
+
+    flags = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+    subprocess.Popen(["cmd", "/c", bat_path], creationflags=flags, close_fds=True)
+    # выходим с задержкой: bridge-вызов успевает вернуть ответ в интерфейс
+    threading.Timer(1.2, lambda: os._exit(0)).start()
 
 
 def _swap_posix(new_file: str, target: str) -> None:
