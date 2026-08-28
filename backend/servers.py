@@ -260,7 +260,9 @@ class ServerRegistry:
         return {"type": FMT_CLUSTER, "version": FMT_VERSION, "cluster": dict(c)}
 
     def export_server(self, name: str) -> dict:
-        return {"type": FMT_SERVER, "version": FMT_VERSION, "server": _norm(name)}
+        cfg = dict(self._data.get("serverConfig", {}).get(name, {}))
+        cfg.pop("authSaved", None)  # признак, не данные
+        return {"type": FMT_SERVER, "version": FMT_VERSION, "server": _norm(name), "config": cfg}
 
     def export_all(self) -> dict:
         d = self.as_dict()
@@ -275,9 +277,13 @@ class ServerRegistry:
         kind = payload.get("type")
 
         if kind == FMT_SERVER:
+            name = _norm(payload.get("server", ""))
             before = len(self.all_servers())
-            self.add_server(payload.get("server", ""))
+            self.add_server(name)
             added["servers"] += len(self.all_servers()) - before
+            cfg = payload.get("config")
+            if cfg and name:
+                self._data.setdefault("serverConfig", {})[name] = dict(cfg)
 
         elif kind == FMT_CLUSTER:
             self._merge_cluster(payload.get("cluster", {}), added)
@@ -289,6 +295,14 @@ class ServerRegistry:
                 before = len(self.all_servers())
                 self.add_server(s)
                 added["servers"] += len(self.all_servers()) - before
+            for host, cfg in (payload.get("serverConfig") or {}).items():
+                c = dict(cfg); c.pop("authSaved", None)
+                self._data.setdefault("serverConfig", {}).setdefault(host, {}).update(c)
+            for p in payload.get("profiles", []):
+                if p.get("name") and not self._profile(p["name"]):
+                    self._data.setdefault("profiles", []).append({
+                        "name": p["name"], "domain": p.get("domain", ""),
+                        "username": p.get("username", ""), "kind": p.get("kind", "domain")})
         else:
             raise ValueError("неизвестный формат импорта")
 

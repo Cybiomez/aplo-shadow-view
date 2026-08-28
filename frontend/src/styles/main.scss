@@ -567,3 +567,6 @@ select.mini {
 /* Индикатор идущего опроса на кнопке «Обновить» */
 .btn-refresh.busy svg { animation: spin .8s linear infinite; }
 .btn-refresh.busy { color: var(--muted); }
+
+/* Футер модалки с распоркой (экспорт/импорт слева) */
+.m-foot .grow { flex: 1; }
