@@ -119,7 +119,12 @@ def probe(server: str) -> dict:
         # «No User exists» / «Пользователи не найдены» — это пусто, а не ошибка
         if "no user" in err or "не найден" in err or "нет польз" in err:
             return {"server": server, "ok": True, "sessions": [], "error": ""}
-        return {"server": server, "ok": False, "sessions": [], "error": _decode(proc.stderr).strip() or "недоступен"}
+        raw = _decode(proc.stderr).strip()
+        low = raw.lower()
+        if "1722" in raw or "rpc" in low or "0x6ba" in low or "0x000006ba" in low:
+            return {"server": server, "ok": False, "sessions": [],
+                    "error": "RPC недоступен (порты 135/445 закрыты). Через один RDP-порт список сеансов не получить — нужен доступ к серверу по сети"}
+        return {"server": server, "ok": False, "sessions": [], "error": raw or "недоступен"}
     try:
         me = getpass.getuser()
     except Exception:

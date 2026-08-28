@@ -213,6 +213,10 @@ class Api:
         self._registry.set_cluster_defaults(name, profile=profile)
         return self._registry.as_dict()
 
+    def set_server_display(self, host: str, display_name: str, show_ip: bool) -> dict:
+        self._registry.set_server_display(host, display_name, show_ip)
+        return self._registry.as_dict()
+
     def set_server_zabbix(self, host: str, url: str, token: str) -> dict:
         self._registry.set_server_zabbix(host, url, bool(url and token))
         if token:

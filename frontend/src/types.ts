@@ -86,7 +86,7 @@ export interface ServerAuth {
 }
 
 /** Конфигурация сервера в реестре. */
-export interface ServerCfg { auth?: ServerAuth; zabbix?: { url: string; configured: boolean }; }
+export interface ServerCfg { auth?: ServerAuth; zabbix?: { url: string; configured: boolean }; displayName?: string; showIp?: boolean; }
 
 /** Реестр серверов и кластеров. */
 export interface Registry {
