@@ -1,6 +1,5 @@
 // Панель серверов (режим «Менеджер»): плоский список серверов локальной сети,
 // добавляются вручную. Опрашивается только выбранное. Без кластеров.
-import { api } from "../bridge";
 import type { Registry } from "../types";
 import { icons } from "./icons";
 import { openServerForm, serverLabel } from "./serverSettings";
@@ -52,7 +51,6 @@ function render(): void {
           <label class="sb-pick"><input type="checkbox" data-server="${enc(srv)}" ${selected.has(srv) ? "checked" : ""}/>
             <span class="sb-srv-name">${serverLabel(srv, registry)}</span></label>
           <button class="sb-cfg" data-cfg="${enc(srv)}" title="Данные и настройки сервера">${icons.gear}</button>
-          <button class="sb-del" data-del="${enc(srv)}" title="Убрать сервер">${icons.close}</button>
         </div>`;
       }).join("") + `<button class="sb-mini" data-all>Выбрать все</button><button class="sb-mini" data-none>Снять</button>`
     : '<span class="sb-hint">Серверов нет. Добавьте сервер локальной сети кнопкой «Сервер».</span>';
@@ -84,12 +82,6 @@ function render(): void {
     b.addEventListener("click", async () => {
       const reg = await openServerForm(registry, decodeURIComponent(b.dataset.cfg!));
       if (reg) propagate(reg);
-    }));
-  host.querySelectorAll<HTMLElement>("[data-del]").forEach((b) =>
-    b.addEventListener("click", async () => {
-      const srv = decodeURIComponent(b.dataset.del!);
-      selected.delete(srv);
-      propagate(await api.removeServer(srv, ""));
     }));
   host.querySelector("[data-all]")?.addEventListener("click", () => { allServers().forEach((s) => selected.add(s)); render(); emit(); });
   host.querySelector("[data-none]")?.addEventListener("click", () => { selected.clear(); render(); emit(); });

@@ -77,7 +77,7 @@ export interface Cluster { name: string; servers: string[]; profile?: string; za
 /** Профиль учётной записи (пароль хранится в Credential Manager, не здесь). */
 export interface Profile { name: string; domain: string; username: string; kind: string; saved?: boolean; }
 
-/** Учётка сервера. */
+/** Учётная запись сервера. */
 export interface ServerAuth {
   mode: "local" | "profile" | "explicit";
   profile?: string;

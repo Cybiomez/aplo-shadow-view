@@ -570,3 +570,15 @@ select.mini {
 
 /* Футер модалки с распоркой (экспорт/импорт слева) */
 .m-foot .grow { flex: 1; }
+
+/* ===== Единый стиль выпадающих списков ===== */
+select.txt, select.mini, .auth-sel, .sort-toggles select {
+  appearance: none; -webkit-appearance: none; -moz-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%238494A6' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 10px center;
+  padding-right: 30px; cursor: pointer;
+}
+select.txt option, select.mini option, .auth-sel option { background: var(--surface); color: var(--ink); }
+
+/* Опасная кнопка в модалке (удалить) */
+.mbtn.danger { color: var(--crit); border-color: var(--crit); &:hover { background: var(--crit-weak); } }

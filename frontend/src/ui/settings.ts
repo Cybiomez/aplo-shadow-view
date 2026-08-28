@@ -32,10 +32,10 @@ export async function initSettings(a: ShadowApi, h: Hooks): Promise<void> {
         <div class="sec">
           <div class="sec-label">Список серверов</div>
           <div class="set-row">
-            <div class="s-text"><div class="s-title">Экспорт и импорт</div><div class="s-sub">Весь список серверов с настройками подключения и именами (без паролей — их вводят на месте). Для обмена с коллегами файлом.</div></div>
+            <div class="s-text"><div class="s-title">Экспорт и импорт</div><div class="s-sub">Без паролей.</div></div>
           </div>
           <div class="set-row">
-            <button class="btn-line" data-export-reg>${icons.upload}Экспорт всего</button>
+            <button class="btn-line" data-export-reg>${icons.upload}Экспорт</button>
             <button class="btn-line" data-import-reg>${icons.download}Импорт</button>
           </div>
         </div>
@@ -44,7 +44,7 @@ export async function initSettings(a: ShadowApi, h: Hooks): Promise<void> {
           <div class="set-row">
             <div class="s-text">
               <div class="s-title">Подключение без подтверждения пользователя</div>
-              <div class="s-sub">Временно разрешает теневой вход, не спрашивая пользователя. Возврат гарантирует системный таймер — сработает, даже если программа закрыта или зависла.</div>
+              <div class="s-sub">Временно разрешает теневой вход, не спрашивая пользователя.</div>
             </div>
             <label class="switch" title="Экстренный режим">
               <input type="checkbox" data-policy role="switch" aria-label="Режим без подтверждения пользователя">

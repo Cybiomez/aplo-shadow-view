@@ -402,8 +402,10 @@ function bindSearchAndSort(): void {
   document.querySelectorAll<HTMLButtonElement>(".sort-tg").forEach((btn) => {
     btn.addEventListener("click", () => {
       const field = btn.dataset.field as SortField;
-      if (field === sortField) sortDir = sortDir === "asc" ? "desc" : "asc";
-      else { sortField = field; sortDir = "asc"; }
+      if (field === sortField) {
+        if (sortDir === "asc") sortDir = "desc";
+        else { sortField = "server"; sortDir = "asc"; } // третий клик — сброс к умолчанию
+      } else { sortField = field; sortDir = "asc"; }
       updateSortToggles();
       renderList();
     });
