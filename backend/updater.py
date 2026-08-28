@@ -55,17 +55,40 @@ def _parse(tag: str):
     return (int(m.group(1)), int(m.group(2)), int(m.group(3)), m.group(4) or "") if m else None
 
 
+def _compare_pre(a: str, b: str) -> int:
+    """Сравнение pre-release-суффиксов по точкам: числа — ЧИСЛЕННО (dev.10 > dev.9),
+    иначе лексически. (Портировано из claude-pocket, где чинили ту же граблю.)"""
+    aa, bb = a.split("."), b.split(".")
+    for i in range(max(len(aa), len(bb))):
+        if i >= len(aa):
+            return -1
+        if i >= len(bb):
+            return 1
+        x, y = aa[i], bb[i]
+        if x.isdigit() and y.isdigit():
+            c = int(x) - int(y)
+        else:
+            c = (x > y) - (x < y)
+        if c:
+            return c
+    return 0
+
+
 def _is_newer(candidate: str, current: str) -> bool:
     c, cur = _parse(candidate), _parse(current)
     if not c or not cur:
         return False
     if c[:3] != cur[:3]:
         return c[:3] > cur[:3]
-    if c[3] == "" and cur[3] != "":
-        return True   # стабильная новее своей же пред-релизной
-    if c[3] != "" and cur[3] == "":
+    # базовые номера равны — сравниваем pre-release-часть
+    cp, curp = c[3], cur[3]
+    if cp == curp:
         return False
-    return c[3] > cur[3]
+    if cp == "":            # кандидат финальный, текущий pre-release
+        return True
+    if curp == "":          # кандидат pre-release, текущий финальный
+        return False
+    return _compare_pre(cp, curp) > 0
 
 
 def _fetch_releases() -> list[dict]:
@@ -141,7 +164,7 @@ def apply(channel: str) -> dict:
     except Exception as e:
         _ulog(f"замена не удалась: {e}")
         return {"ok": False, "message": f"Не удалось установить: {e}"}
-    return {"ok": True, "message": f"Обновление v{info['version']} загружено — приложение перезапустится"}
+    return {"ok": True, "message": f"Обновление v{info['version']} загружено — приложение закроется и запустится заново"}
 
 
 def _ulog(msg: str) -> None:
@@ -156,48 +179,56 @@ def _ulog(msg: str) -> None:
 
 def _swap_windows(new_file: str, target: str) -> None:
     """
-    Помощник .bat ждёт выхода приложения (по PID), затем с повторами подменяет exe
-    и перезапускает. Замена с повторами — потому что запущенный exe залочен, файл
-    освобождается не мгновенно. Всё пишется в update.log рядом с настройками.
-    Приложение завершается не сразу, а через ~1.2с — чтобы интерфейс успел показать
-    ответ, а bridge-вызов корректно вернулся.
+    Помощник (без окна) ждёт ШТАТНОГО выхода приложения, затем подменяет exe и
+    перезапускает. НЕ переименовываем работающий exe — это ломает проверку
+    родительского процесса в PyInstaller onefile («failed to obtain executable
+    path for parent process»). Файл освобождается, когда приложение закрылось
+    через window.destroy() (см. api.apply_update).
     """
     pid = os.getpid()
     log = str(app_dir() / "update.log")
     bat_path = os.path.join(os.environ.get("TEMP", os.path.dirname(target)), "aplo-shadow-update.bat")
-
     script = (
         "@echo off\r\n"
         f'echo [%date% %time%] helper start pid={pid} >> "{log}"\r\n'
         ":wait\r\n"
         f'tasklist /FI "PID eq {pid}" 2>nul | find "{pid}" >nul\r\n'
         "if not errorlevel 1 ( ping -n 2 127.0.0.1 >nul & goto wait )\r\n"
-        f'echo [%date% %time%] app exited, swapping >> "{log}"\r\n'
         "set /a n=0\r\n"
         ":move\r\n"
         f'move /Y "{new_file}" "{target}" >> "{log}" 2>&1\r\n'
         "if errorlevel 1 (\r\n"
         "  set /a n+=1\r\n"
-        f'  if %n% lss 20 ( ping -n 2 127.0.0.1 >nul & goto move )\r\n'
-        f'  echo [%date% %time%] MOVE FAILED after retries >> "{log}"\r\n'
+        "  if %n% lss 30 ( ping -n 2 127.0.0.1 >nul & goto move )\r\n"
+        f'  echo [%date% %time%] MOVE FAILED >> "{log}"\r\n'
         "  goto done\r\n"
         ")\r\n"
-        f'echo [%date% %time%] moved OK, restarting >> "{log}"\r\n'
-        f'start "" "{target}"\r\n'
+        f'echo [%date% %time%] moved OK, restarting via explorer >> "{log}"\r\n'
+        f'explorer.exe "{target}"\r\n'
         ":done\r\n"
         'del "%~f0"\r\n'
     )
     with open(bat_path, "w", encoding="cp866", errors="replace") as fh:
         fh.write(script)
-    _ulog(f"помощник записан: {bat_path}, запуск, отложенный выход через 1.2с")
-
-    flags = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+    _ulog("помощник запущен (скрыто), ждёт штатного выхода приложения")
+    flags = (getattr(subprocess, "CREATE_NO_WINDOW", 0)
+             | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
     subprocess.Popen(["cmd", "/c", bat_path], creationflags=flags, close_fds=True)
-    # выходим с задержкой: bridge-вызов успевает вернуть ответ в интерфейс
-    threading.Timer(1.2, lambda: os._exit(0)).start()
+    # выход инициирует api.apply_update (window.destroy), не отсюда — чтобы онефайл
+    # закрылся штатно и освободил exe для замены.
 
 
 def _swap_posix(new_file: str, target: str) -> None:
     os.replace(new_file, target)
     os.chmod(target, 0o755)
     os.execv(target, [target])
+
+
+def cleanup_leftovers() -> None:
+    """Убрать остаток прошлого обновления (exe.old рядом) — вызывать при старте."""
+    try:
+        old = os.path.abspath(sys.executable) + ".old"
+        if os.path.exists(old):
+            os.remove(old)
+    except OSError:
+        pass

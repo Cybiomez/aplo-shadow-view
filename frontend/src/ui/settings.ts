@@ -30,11 +30,21 @@ export async function initSettings(a: ShadowApi, h: Hooks): Promise<void> {
       </div>
       <div class="m-body">
         <div class="sec">
+          <div class="sec-label">Список серверов</div>
+          <div class="set-row">
+            <div class="s-text"><div class="s-title">Экспорт и импорт</div><div class="s-sub">Без паролей.</div></div>
+          </div>
+          <div class="set-row">
+            <button class="btn-line" data-export-reg>${icons.upload}Экспорт</button>
+            <button class="btn-line" data-import-reg>${icons.download}Импорт</button>
+          </div>
+        </div>
+        <div class="sec">
           <div class="sec-label">Экстренный доступ</div>
           <div class="set-row">
             <div class="s-text">
               <div class="s-title">Подключение без подтверждения пользователя</div>
-              <div class="s-sub">Временно разрешает теневой вход, не спрашивая пользователя. Возврат гарантирует системный таймер — сработает, даже если программа закрыта или зависла.</div>
+              <div class="s-sub">Временно разрешает теневой вход, не спрашивая пользователя.</div>
             </div>
             <label class="switch" title="Экстренный режим">
               <input type="checkbox" data-policy role="switch" aria-label="Режим без подтверждения пользователя">
@@ -79,6 +89,17 @@ export async function initSettings(a: ShadowApi, h: Hooks): Promise<void> {
   overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
 
   q<HTMLElement>("[data-current]").textContent = "v" + (await api.getVersion());
+
+  q<HTMLElement>("[data-export-reg]").addEventListener("click", async () => {
+    const res = await api.exportFile("registry", "");
+    toast(res.message, res.ok ? "ok" : "err");
+  });
+  q<HTMLElement>("[data-import-reg]").addEventListener("click", async () => {
+    const res = await api.importFile();
+    if (res === null) return;
+    if ("error" in res) { toast("Ошибка импорта: " + (res as { error: string }).error, "err"); return; }
+    toast(`Импортировано: серверов ${res.added.servers}`);
+  });
 
   bindPolicy();
   bindUpdate();

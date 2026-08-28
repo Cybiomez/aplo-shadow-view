@@ -194,6 +194,7 @@ body {
   width: 100%; max-width: 440px; background: var(--surface);
   border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow-modal); overflow: hidden;
   &.wide { max-width: 500px; }
+  max-height: 90vh; display: flex; flex-direction: column;
   .m-head { display: flex; align-items: center; gap: 12px; padding: 18px 20px 0; }
   .m-ic {
     width: 36px; height: 36px; flex: none; border-radius: 9px; display: grid; place-items: center;
@@ -205,7 +206,7 @@ body {
   h2 { margin: 0; font-size: 15px; font-weight: 700; }
   .m-close { margin-left: auto; }
   .m-body {
-    padding: 14px 20px 20px;
+    padding: 14px 20px 20px; overflow-y: auto; flex: 1; min-height: 0;
     p { margin: 0; font-size: 13.5px; color: var(--muted); line-height: 1.55; }
     .warnline {
       margin-top: 12px; padding: 10px 12px; background: var(--warn-weak); color: var(--warn);
@@ -328,3 +329,256 @@ select.mini {
   .act { padding: 8px; }
   .who .meta .sid { display: none; }
 }
+
+/* ===== v2: мультисервер ===== */
+
+/* Панель серверов */
+.serverbar {
+  border-bottom: 1px solid var(--border); background: var(--surface-2);
+}
+.sb-top { display: flex; align-items: center; gap: 8px; padding: 9px 14px; }
+.sb-tabs {
+  display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; overflow-x: auto;
+}
+.sb-empty-tabs { font-size: 12.5px; color: var(--faint); padding: 6px 2px; }
+.sb-tab {
+  display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+  font: inherit; font-size: 12.5px; font-weight: 600; color: var(--muted);
+  background: transparent; border: 1px solid transparent; border-bottom: none;
+  padding: 7px 12px; border-radius: 8px 8px 0 0; cursor: pointer; transition: background .15s, color .15s;
+  &:hover { color: var(--ink); background: var(--surface); }
+  &.on { color: var(--accent); background: var(--surface); border-color: var(--border); }
+}
+.sb-badge {
+  font-size: 10.5px; font-weight: 700; background: var(--accent); color: var(--accent-ink);
+  border-radius: 10px; padding: 1px 6px; min-width: 16px; text-align: center;
+}
+.sb-manage {
+  flex: none;
+  display: inline-flex; align-items: center; gap: 6px;
+  font: inherit; font-size: 12px; font-weight: 600; color: var(--muted);
+  background: var(--surface); border: 1px solid var(--border-strong); padding: 6px 11px; border-radius: 8px; cursor: pointer;
+  &:hover { color: var(--accent); border-color: var(--accent); }
+  svg { width: 14px; height: 14px; }
+}
+.sb-servers {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 7px; padding: 10px 14px;
+  border-top: 1px solid var(--border);
+}
+.sb-chip {
+  display: inline-flex; align-items: center; gap: 7px; cursor: pointer;
+  font-size: 12.5px; color: var(--ink); background: var(--surface);
+  border: 1px solid var(--border-strong); padding: 5px 11px; border-radius: 16px; transition: border-color .15s, background .15s;
+  input { margin: 0; cursor: pointer; accent-color: var(--accent); }
+  &.on { border-color: var(--accent); background: var(--accent-weak); color: var(--accent); font-weight: 600; }
+}
+.sb-mini {
+  font: inherit; font-size: 12px; font-weight: 600; color: var(--muted);
+  background: transparent; border: 1px dashed var(--border-strong); padding: 5px 10px; border-radius: 16px; cursor: pointer;
+  &:hover { color: var(--accent); border-color: var(--accent); }
+}
+.sb-hint { font-size: 12.5px; color: var(--faint); padding: 2px 0; }
+
+/* Недоступные серверы в тулбаре */
+.unreach { font-size: 12px; color: var(--crit); margin-left: 8px; }
+
+/* Колонка сервера в строке */
+.server-col {
+  flex: none; font-size: 12px; color: var(--muted); background: var(--surface-2);
+  border: 1px solid var(--border); border-radius: 7px; padding: 4px 9px; white-space: nowrap; max-width: 160px; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* Чекбокс выделения строки */
+.rowcheck { display: grid; place-items: center; flex: none; cursor: pointer;
+  input { width: 16px; height: 16px; margin: 0; cursor: pointer; accent-color: var(--accent); }
+}
+.row.selected { border-color: var(--accent); background: var(--accent-weak); }
+
+/* Массовая панель */
+.massbar {
+  display: none; align-items: center; gap: 10px; padding: 9px 18px;
+  border-bottom: 1px solid var(--accent); background: var(--accent-weak);
+  &.show { display: flex; }
+  .mb-count { font-size: 12.5px; color: var(--accent); font-weight: 600; }
+  .grow { flex: 1; }
+}
+.mb-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  font: inherit; font-size: 12px; font-weight: 600; color: var(--warn);
+  background: var(--surface); border: 1px solid var(--warn); padding: 6px 11px; border-radius: 8px; cursor: pointer;
+  transition: background .15s, color .15s;
+  svg { width: 14px; height: 14px; }
+  &:hover { background: var(--warn); color: var(--surface); }
+  &.crit { color: var(--crit); border-color: var(--crit); &:hover { background: var(--crit); color: #fff; } }
+  &.ghost { color: var(--muted); border-color: var(--border-strong); &:hover { color: var(--ink); background: var(--surface-2); } }
+}
+
+/* Действие-кнопка в disabled (при выделении) */
+.act:disabled { opacity: .4; cursor: default; }
+.act:disabled:hover { border-color: transparent; }
+
+
+/* Кнопки панели реестра — ровные, с иконками */
+.reg-toolbar { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 10px; }
+.reg-act {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-width: 0;
+  font: inherit; font-size: 12.5px; font-weight: 600; color: var(--accent); white-space: nowrap;
+  background: var(--surface); border: 1px solid var(--border-strong); border-radius: 9px;
+  padding: 10px 8px; cursor: pointer; transition: background .15s, border-color .15s;
+  &:hover { background: var(--accent-weak); border-color: var(--accent); }
+  svg { width: 15px; height: 15px; flex: none; }
+  span { overflow: hidden; text-overflow: ellipsis; }
+}
+.reg-note { font-size: 12px; color: var(--muted); line-height: 1.45; margin-bottom: 14px; }
+
+/* Управление реестром */
+.reg-list { display: flex; flex-direction: column; gap: 12px; max-height: 52vh; overflow-y: auto; }
+.reg-cluster { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.reg-cluster-head {
+  display: flex; align-items: center; gap: 9px; padding: 10px 12px; background: var(--surface-2);
+  b { font-size: 13.5px; }
+  .grow { flex: 1; }
+}
+.reg-count { font-size: 11px; font-weight: 700; color: var(--faint); background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1px 7px; }
+.reg-mini {
+  font: inherit; font-size: 11.5px; font-weight: 600; color: var(--muted);
+  background: var(--surface); border: 1px solid var(--border-strong); padding: 4px 9px; border-radius: 7px; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 4px;
+  &:hover { color: var(--accent); border-color: var(--accent); }
+  &.danger { color: var(--crit); &:hover { border-color: var(--crit); } svg { width: 12px; height: 12px; } }
+}
+.reg-servers { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 12px; }
+.reg-srv {
+  display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink);
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 14px; padding: 4px 6px 4px 11px;
+}
+.reg-x { display: grid; place-items: center; border: none; background: transparent; color: var(--faint); cursor: pointer; padding: 2px; border-radius: 50%;
+  &:hover { color: var(--crit); background: var(--crit-weak); } svg { width: 12px; height: 12px; } }
+.reg-empty, .reg-hint { font-size: 12px; color: var(--faint); }
+.reg-hint { padding: 20px; text-align: center; }
+
+/* Текстовые поля в настройках */
+.txt {
+  width: 100%; font: inherit; font-size: 13px; color: var(--ink);
+  background: var(--surface-2); border: 1px solid var(--border-strong); border-radius: 8px; padding: 8px 11px;
+  &::placeholder { color: var(--faint); }
+  &:focus { outline: none; border-color: var(--accent); }
+}
+.zbx-state { font-size: 12px; color: var(--good); align-self: center; }
+/* Ресурсы в строке сеанса */
+.res { color: var(--accent); font-weight: 500; }
+/* Загрузка на чипе сервера */
+.sb-load { font-size: 10.5px; font-weight: 600; color: var(--muted); background: var(--surface-2); border-radius: 8px; padding: 1px 6px; margin-left: 2px;
+  &.hot { color: var(--crit); background: var(--crit-weak); } }
+
+/* ===== v2: учётные записи и привязка ===== */
+.reg-section { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; }
+.reg-sec-title { font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--faint); margin-bottom: 8px; }
+.reg-profile { display: flex; align-items: center; gap: 9px; padding: 6px 0; }
+.rp-ic { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 7px; background: var(--accent-weak); color: var(--accent); svg { width: 14px; height: 14px; } }
+.rp-name { display: flex; flex-direction: column; b { font-size: 13px; } }
+.rp-login { font-size: 11.5px; color: var(--muted); }
+.reg-cluster-body { display: flex; flex-direction: column; padding: 6px 10px; gap: 2px; }
+.reg-srv-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--border); &:last-child { border-bottom: none; } }
+.rs-name { font-size: 12.5px; color: var(--ink); }
+.rs-auth { flex: none; }
+.auth-sel {
+  font: inherit; font-size: 11.5px; color: var(--ink); background: var(--surface-2);
+  border: 1px solid var(--border-strong); border-radius: 7px; padding: 4px 7px; cursor: pointer; max-width: 150px;
+}
+.reg-foot { margin-top: 12px; }
+.reg-act.wide { width: 100%; grid-column: 1 / -1; }
+.cred-form { display: flex; flex-direction: column; gap: 9px; }
+
+/* ===== v2: режим Менеджер / Локально ===== */
+.mode-seg {
+  display: inline-flex; gap: 3px; padding: 3px; background: var(--surface-2);
+  border: 1px solid var(--border-strong); border-radius: 9px; flex: none;
+  button {
+    font: inherit; font-size: 12px; font-weight: 600; color: var(--muted);
+    background: transparent; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer;
+    &.on { background: var(--surface); color: var(--accent); box-shadow: var(--shadow); }
+  }
+}
+/* Локальный режим: панель серверов и колонка сервера не нужны */
+.app.local-mode .serverbar,
+.app.local-mode .server-col,
+.app.local-mode .unreach,
+.app.local-mode .sort-tg[data-field="server"] { display: none; }
+@media (max-width: 720px) { .mode-seg button { padding: 6px 9px; } }
+
+/* Версия рядом с названием */
+.app-ver { font-size: 11px; font-weight: 600; color: var(--faint); letter-spacing: 0; vertical-align: middle; }
+
+/* ===== v2: управление на панели + карточки серверов ===== */
+.sb-manage-btns { display: flex; gap: 6px; flex: none; }
+.sb-mbtn {
+  display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+  font: inherit; font-size: 12px; font-weight: 600; color: var(--muted);
+  background: var(--surface); border: 1px solid var(--border-strong); padding: 6px 10px; border-radius: 8px; cursor: pointer;
+  transition: color .15s, border-color .15s;
+  &:hover { color: var(--accent); border-color: var(--accent); }
+  svg { width: 14px; height: 14px; }
+}
+@media (max-width: 760px) { .sb-mbtn span { display: none; } .sb-mbtn { padding: 6px 8px; } }
+
+.sb-card {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: var(--surface); border: 1px solid var(--border-strong); border-radius: 12px; padding: 5px 6px 5px 12px;
+  &.on { border-color: var(--accent); background: var(--accent-weak); }
+}
+.sb-pick { display: inline-flex; align-items: center; gap: 8px; cursor: pointer;
+  input { margin: 0; cursor: pointer; accent-color: var(--accent); }
+}
+.sb-srv-name { font-size: 12.5px; font-weight: 600; color: var(--ink); }
+.sb-card.on .sb-srv-name { color: var(--accent); }
+.sb-cfg, .sb-del {
+  display: grid; place-items: center; width: 26px; height: 26px; border-radius: 7px;
+  border: none; background: transparent; color: var(--faint); cursor: pointer;
+  &:hover { background: var(--surface-2); color: var(--ink); }
+  svg { width: 14px; height: 14px; }
+}
+.sb-del:hover { color: var(--crit); background: var(--crit-weak); }
+
+/* Попап настроек сервера */
+.ss-field { margin-bottom: 12px; label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 5px; } }
+.ss-static { font-size: 13px; color: var(--ink); padding: 8px 11px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; }
+.ss-toggle { display: flex; align-items: center; gap: 9px; font-size: 13px; color: var(--ink); margin-bottom: 14px; cursor: pointer;
+  input { margin: 0; accent-color: var(--accent); } }
+.ss-auth { display: flex; flex-direction: column; gap: 9px; margin-bottom: 4px; }
+
+/* Инструменты кластера */
+.sb-cluster-tools { display: flex; gap: 6px; padding: 6px 14px 0; }
+.sb-cluster-tools .sb-mini.danger { color: var(--crit); &:hover { border-color: var(--crit); } }
+/* Форма кластера — выбор серверов */
+.cl-servers { display: flex; flex-direction: column; gap: 4px; max-height: 30vh; overflow-y: auto; }
+.cl-srv { display: flex; align-items: center; gap: 9px; font-size: 13px; color: var(--ink); padding: 5px 8px; border: 1px solid var(--border); border-radius: 8px; cursor: pointer;
+  input { margin: 0; accent-color: var(--accent); } }
+/* Признак пароля в профиле */
+.rp-saved { color: var(--good); }
+.rp-nosave { color: var(--warn); }
+/* Недоступный сервер — кликабельно для причины */
+.unreach-srv { text-decoration: underline dotted; cursor: help; }
+
+/* Заголовок панели серверов (плоский список) */
+.sb-title { font-size: 12.5px; font-weight: 700; color: var(--muted); letter-spacing: .02em; }
+
+
+/* Индикатор идущего опроса на кнопке «Обновить» */
+.btn-refresh.busy svg { animation: spin .8s linear infinite; }
+.btn-refresh.busy { color: var(--muted); }
+
+/* Футер модалки с распоркой (экспорт/импорт слева) */
+.m-foot .grow { flex: 1; }
+
+/* ===== Единый стиль выпадающих списков ===== */
+select.txt, select.mini, .auth-sel, .sort-toggles select {
+  appearance: none; -webkit-appearance: none; -moz-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%238494A6' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 10px center;
+  padding-right: 30px; cursor: pointer;
+}
+select.txt option, select.mini option, .auth-sel option { background: var(--surface); color: var(--ink); }
+
+/* Опасная кнопка в модалке (удалить) */
+.mbtn.danger { color: var(--crit); border-color: var(--crit); &:hover { background: var(--crit-weak); } }

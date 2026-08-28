@@ -12,15 +12,18 @@ from __future__ import annotations
 import socket
 import sys
 
-from . import actions, policy, updater
+from . import actions, credentials, policy, resources, updater
+from .servers import ServerRegistry
 from .config import Config
-from .sessions import list_sessions
+from .sessions import list_sessions, probe
 from .version import VERSION
 
 
 class Api:
     def __init__(self, config: Config) -> None:
         self._config = config
+        self._registry = ServerRegistry()
+        self._window = None
 
     # --- информация ---
     def get_server_name(self) -> str:
@@ -33,21 +36,217 @@ class Api:
         return VERSION
 
     # --- сеансы ---
-    def list_sessions(self) -> list[dict]:
-        return list_sessions()
+    def list_sessions(self, server: str = "") -> list[dict]:
+        return list_sessions(server)
 
-    def shadow(self, sid: int, mode: str) -> dict:
-        return actions.shadow(int(sid), mode)
+    def _apply_creds(self, host: str) -> None:
+        """Положить учётку сервера в Credential Manager перед командами.
+        local — снять явные креды (работаем под текущей учёткой)."""
+        auth = self._registry.resolve_auth(host)
+        mode = auth.get("mode", "local")
+        if mode == "local":
+            credentials.clear_server(host)
+            return
+        if mode == "profile":
+            domain, username = self._registry.profile_login(auth.get("profile", ""))
+            pw = credentials.read_profile(auth.get("profile", "")) or ""
+        else:  # explicit
+            domain, username = auth.get("domain", ""), auth.get("username", "")
+            pw = credentials.read_profile("server:" + host) or ""
+        if username:
+            credentials.apply_server(host, domain, username, pw)
 
-    def disconnect(self, sid: int) -> dict:
-        return actions.disconnect(int(sid))
+    def _zabbix_for(self, host: str):
+        url = self._registry.resolve_zabbix(host)
+        token = credentials.read_profile("zabbix:" + host) or ""
+        if not url:
+            url, token = self._config.zabbix  # глобальный запасной
+        return url, token
 
-    def logoff(self, sid: int) -> dict:
-        return actions.logoff(int(sid))
+    def poll_servers(self, servers: list) -> list:
+        """Параллельный опрос ТОЛЬКО переданных серверов (то, что открыто по фильтрам).
+        Возвращает список {server, ok, sessions, error, load?}. Один зависший не
+        вешает остальных — у каждого свой таймаут. Если включены ресурсы —
+        добавляет загрузку сервера и ЦПУ/ОЗУ по сеансам (тяжелее)."""
+        names = [s for s in (servers or []) if s]
+        if not names:
+            return []
+        def one(server: str) -> dict:
+            self._apply_creds(server)
+            return probe(server)
+
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=min(8, len(names))) as ex:
+            return list(ex.map(one, names))
+
+    def shadow(self, sid: int, mode: str, server: str = "") -> dict:
+        return actions.shadow(int(sid), mode, server)
+
+    def disconnect(self, sid: int, server: str = "") -> dict:
+        return actions.disconnect(int(sid), server)
+
+    def logoff(self, sid: int, server: str = "") -> dict:
+        return actions.logoff(int(sid), server)
+
+    # --- реестр серверов и кластеров ---
+    def get_registry(self) -> dict:
+        return self._get_registry()
+
+    def _get_registry(self) -> dict:
+        """Реестр + признак сохранённого пароля (сами пароли не отдаём)."""
+        reg = self._registry.as_dict()
+        for p in reg.get("profiles", []):
+            p["saved"] = credentials.has_profile(p.get("name", ""))
+        for host, cfg in reg.get("serverConfig", {}).items():
+            auth = cfg.get("auth", {})
+            if auth.get("mode") == "explicit":
+                cfg["authSaved"] = credentials.has_profile("server:" + host)
+        return reg
+
+    def add_cluster(self, name: str) -> dict:
+        self._registry.add_cluster(name); return self._get_registry()
+
+    def remove_cluster(self, name: str) -> dict:
+        self._registry.remove_cluster(name); return self._get_registry()
+
+    def rename_cluster(self, old: str, new: str) -> dict:
+        self._registry.rename_cluster(old, new); return self._get_registry()
+
+    def add_server(self, name: str, cluster: str = "") -> dict:
+        self._registry.add_server(name, cluster); return self._get_registry()
+
+    def remove_server(self, name: str, cluster: str = "") -> dict:
+        self._registry.remove_server(name, cluster)
+        # 9) убрать учётки удалённого сервера из Credential Manager
+        credentials.clear_server(name.split(":", 1)[0])
+        credentials.delete_profile("server:" + name)
+        credentials.delete_profile("zabbix:" + name)
+        return self._get_registry()
+
+    def move_server(self, host: str, cluster: str = "") -> dict:
+        self._registry.move_server(host, cluster); return self._get_registry()
+
+    def export_cluster(self, name: str) -> dict | None:
+        return self._registry.export_cluster(name)
+
+    def export_server(self, name: str) -> dict:
+        return self._registry.export_server(name)
+
+    def export_registry(self) -> dict:
+        return self._registry.export_all()
+
+    def import_registry(self, payload: dict) -> dict:
+        added = self._registry.import_data(payload)
+        return {"added": added, "registry": self._registry.as_dict()}
+
+    # --- импорт/экспорт файлом (диалоги pywebview) ---
+    def export_file(self, kind: str, name: str = "") -> dict:
+        """kind: cluster | server | registry. Открывает диалог сохранения."""
+        if kind == "cluster":
+            payload = self._registry.export_cluster(name)
+            suggested = f"{name}.asvcluster"
+        elif kind == "server":
+            payload = self._registry.export_server(name)
+            suggested = f"{name}.asvserver"
+        else:
+            payload = self._registry.export_all()
+            suggested = "aploshadowview-registry.json"
+        if payload is None:
+            return {"ok": False, "message": "Нечего экспортировать"}
+        return self._save_dialog(payload, suggested)
+
+    def import_file(self) -> dict | None:
+        data = self._open_dialog()
+        if data is None:
+            return None
+        try:
+            added = self._registry.import_data(data)
+        except ValueError as e:
+            return {"error": str(e)}
+        return {"added": added, "registry": self._registry.as_dict()}
+
+    def _save_dialog(self, payload: dict, suggested: str) -> dict:
+        try:
+            import json as _json
+            import webview
+            win = webview.active_window()
+            if win is None:
+                return {"ok": False, "message": "Нет активного окна"}
+            path = win.create_file_dialog(webview.SAVE_DIALOG, save_filename=suggested)
+            if not path:
+                return {"ok": False, "message": "Отменено"}
+            target = path if isinstance(path, str) else path[0]
+            with open(target, "w", encoding="utf-8") as fh:
+                _json.dump(payload, fh, ensure_ascii=False, indent=2)
+            return {"ok": True, "message": f"Сохранено: {target}"}
+        except Exception as e:
+            return {"ok": False, "message": f"Ошибка экспорта: {e}"}
+
+    def _open_dialog(self) -> dict | None:
+        try:
+            import json as _json
+            import webview
+            win = webview.active_window()
+            if win is None:
+                return None
+            paths = win.create_file_dialog(webview.OPEN_DIALOG, allow_multiple=False)
+            if not paths:
+                return None
+            src = paths[0] if isinstance(paths, (list, tuple)) else paths
+            with open(src, "r", encoding="utf-8") as fh:
+                return _json.load(fh)
+        except Exception:
+            return None
+
+    # --- профили учётных записей и привязка ---
+    def set_profile(self, name: str, domain: str, username: str, password: str, kind: str = "domain") -> dict:
+        self._registry.set_profile(name, domain, username, kind)
+        if password:
+            credentials.write_profile(name, username, password)
+        return self._get_registry()
+
+    def remove_profile(self, name: str) -> dict:
+        self._registry.remove_profile(name)
+        credentials.delete_profile(name)
+        return self._get_registry()
+
+    def set_server_auth(self, host: str, auth: dict, password: str = "") -> dict:
+        self._registry.set_server_auth(host, auth)
+        if auth.get("mode") == "explicit" and password:
+            credentials.write_profile("server:" + host, auth.get("username", ""), password)
+        return self._get_registry()
+
+    def set_cluster_profile(self, name: str, profile: str) -> dict:
+        self._registry.set_cluster_defaults(name, profile=profile)
+        return self._get_registry()
+
+    def set_server_display(self, host: str, display_name: str, show_ip: bool) -> dict:
+        self._registry.set_server_display(host, display_name, show_ip)
+        return self._get_registry()
+
+    def set_server_zabbix(self, host: str, url: str, token: str) -> dict:
+        self._registry.set_server_zabbix(host, url, bool(url and token))
+        if token:
+            credentials.write_profile("zabbix:" + host, "", token)
+        return self._get_registry()
+
+    def set_cluster_zabbix(self, name: str, url: str) -> dict:
+        self._registry.set_cluster_defaults(name, zabbix_url=url)
+        return self._get_registry()
+
+    def test_server(self, host: str) -> dict:
+        """Применить креды и проверить доступность (quser). {ok, error}."""
+        self._apply_creds(host)
+        from .sessions import probe
+        p = probe(host)
+        return {"ok": p["ok"], "error": p.get("error", "")}
 
     # --- настройки ---
     def get_settings(self) -> dict:
         return self._config.as_dict()
+
+    def set_mode(self, mode: str) -> None:
+        self._config.mode = mode
 
     def set_channel(self, channel: str) -> None:
         self._config.channel = channel
@@ -55,15 +254,21 @@ class Api:
     def set_policy_minutes(self, minutes: int) -> None:
         self._config.policy_minutes = int(minutes)
 
+    def set_show_resources(self, value: bool) -> None:
+        self._config.show_resources = bool(value)
+
+    def set_zabbix(self, url: str, token: str) -> None:
+        self._config.set_zabbix(url, token)
+
     # --- политика (экстренный режим) ---
-    def get_policy(self) -> dict:
-        return policy.get_policy()
+    def get_policy(self, server: str = "") -> dict:
+        return policy.get_policy(server)
 
-    def enable_emergency(self) -> dict:
-        return policy.enable_emergency(self._config.policy_minutes)
+    def enable_emergency(self, server: str = "") -> dict:
+        return policy.enable_emergency(self._config.policy_minutes, server)
 
-    def disable_emergency(self) -> dict:
-        return policy.disable_emergency()
+    def disable_emergency(self, server: str = "") -> dict:
+        return policy.disable_emergency(server)
 
     # --- журнал ---
     def open_log(self) -> None:
@@ -98,5 +303,24 @@ class Api:
         info.pop("_release", None)  # внутреннее наружу не отдаём
         return info
 
+    def set_window(self, window) -> None:
+        self._window = window
+
     def apply_update(self) -> dict:
-        return updater.apply(self._config.channel)
+        res = updater.apply(self._config.channel)
+        if res.get("ok"):
+            # закрыть приложение штатно, чтобы освободить exe для замены;
+            # os._exit — страховка, если destroy не завершит процесс
+            import threading
+            threading.Timer(0.8, self._exit_app).start()
+        return res
+
+    def _exit_app(self) -> None:
+        import os
+        try:
+            if self._window is not None:
+                self._window.destroy()
+        except Exception:
+            pass
+        import threading
+        threading.Timer(2.5, lambda: os._exit(0)).start()

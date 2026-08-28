@@ -17,6 +17,11 @@ import re
 import subprocess
 import sys
 
+def _host_only(server: str) -> str:
+    """Отбросить :порт — quser/RPC идут по стандартным портам, не по RDP-порту."""
+    return server.split(':', 1)[0] if server else server
+
+
 _ACTIVE_WORDS = ("active", "активно", "активн")
 
 
@@ -62,18 +67,23 @@ def _parse(text: str, me: str) -> list[dict]:
     return out
 
 
-def list_sessions() -> list[dict]:
+def list_sessions(server: str = "") -> list[dict]:
+    """Сеансы локального сервера (server пустой) или удалённого (quser /server:ИМЯ)."""
     if sys.platform != "win32":
         # Заглушка для отладки вида на не-Windows.
+        tag = f"@{server}" if server else ""
         return [
-            {"name": "admin", "sid": 1, "state": "active", "idle": "нет", "you": True},
-            {"name": "i.ivanov", "sid": 3, "state": "active", "idle": "2 мин", "you": False},
-            {"name": "p.petrov", "sid": 4, "state": "active", "idle": "6 мин", "you": False},
-            {"name": "a.kozlov", "sid": 2, "state": "disc", "idle": "—", "you": False},
+            {"name": f"admin{tag}", "sid": 1, "state": "active", "idle": "нет", "you": not server},
+            {"name": f"i.ivanov{tag}", "sid": 3, "state": "active", "idle": "2 мин", "you": False},
+            {"name": f"p.petrov{tag}", "sid": 4, "state": "active", "idle": "6 мин", "you": False},
+            {"name": f"a.kozlov{tag}", "sid": 2, "state": "disc", "idle": "—", "you": False},
         ]
+    cmd = ["quser"]
+    if server:
+        cmd.append(f"/server:{_host_only(server)}")
     try:
         raw = subprocess.run(
-            ["quser"], capture_output=True, timeout=10,
+            cmd, capture_output=True, timeout=10,
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         ).stdout
     except (OSError, subprocess.SubprocessError):
@@ -82,4 +92,42 @@ def list_sessions() -> list[dict]:
         me = getpass.getuser()
     except Exception:
         me = ""
-    return _parse(_decode(raw), me)
+    # «вы» имеет смысл только на локальном сервере
+    return _parse(_decode(raw), me if not server else "")
+
+
+def probe(server: str) -> dict:
+    """Опрос одного сервера с различением «пусто» и «недоступен».
+    Возвращает {server, ok, sessions, error}."""
+    if sys.platform != "win32":
+        return {"server": server, "ok": True, "sessions": list_sessions(server), "error": ""}
+    cmd = ["quser"]
+    if server:
+        cmd.append(f"/server:{_host_only(server)}")
+    try:
+        proc = subprocess.run(
+            cmd, capture_output=True, timeout=10,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except subprocess.TimeoutExpired:
+        return {"server": server, "ok": False, "sessions": [], "error": "таймаут"}
+    except OSError as e:
+        return {"server": server, "ok": False, "sessions": [], "error": str(e)}
+    # quser возвращает код 1 и текст в stderr, если нет сеансов ИЛИ сервер недоступен
+    if proc.returncode != 0 and not proc.stdout.strip():
+        err = _decode(proc.stderr).strip().lower()
+        # «No User exists» / «Пользователи не найдены» — это пусто, а не ошибка
+        if "no user" in err or "не найден" in err or "нет польз" in err:
+            return {"server": server, "ok": True, "sessions": [], "error": ""}
+        raw = _decode(proc.stderr).strip()
+        low = raw.lower()
+        if "1722" in raw or "rpc" in low or "0x6ba" in low or "0x000006ba" in low:
+            return {"server": server, "ok": False, "sessions": [],
+                    "error": "RPC недоступен (порты 135/445 закрыты). Через один RDP-порт список сеансов не получить — нужен доступ к серверу по сети"}
+        return {"server": server, "ok": False, "sessions": [], "error": raw or "недоступен"}
+    try:
+        me = getpass.getuser()
+    except Exception:
+        me = ""
+    return {"server": server, "ok": True,
+            "sessions": _parse(_decode(proc.stdout), me if not server else ""), "error": ""}

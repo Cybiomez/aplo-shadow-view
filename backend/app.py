@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -47,7 +48,26 @@ def _sane_position(state: dict) -> dict:
     return state
 
 
+
+def _use_bundled_webview2() -> None:
+    """Для старых Windows (Server 2012 R2) без установленного WebView2: если рядом
+    с приложением лежит папка webview2/ с fixed-version рантаймом — использовать
+    её, не требуя установки в систему. Класть runtime туда можно и без пересборки."""
+    if sys.platform != "win32":
+        return
+    if getattr(sys, "frozen", False):
+        base = Path(sys.executable).resolve().parent
+    else:
+        base = Path(__file__).resolve().parent.parent
+    folder = base / "webview2"
+    if folder.is_dir():
+        os.environ.setdefault("WEBVIEW2_BROWSER_EXECUTABLE_FOLDER", str(folder))
+
+
 def main() -> None:
+    _use_bundled_webview2()
+    from . import updater
+    updater.cleanup_leftovers()
     try:
         import webview
     except ImportError as e:
@@ -73,6 +93,7 @@ def main() -> None:
         kwargs["y"] = int(state["y"])
 
     window = webview.create_window("AploShadowView", resolve_ui_index(), js_api=api, **kwargs)
+    api.set_window(window)
 
     _wire_geometry(window, config, restore_maximized=bool(state.get("maximized", False)))
 

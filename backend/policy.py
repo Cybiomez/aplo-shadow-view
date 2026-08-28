@@ -1,21 +1,17 @@
 """
-Политика теневого доступа RDS.
+Политика теневого доступа RDS — локально и на удалённом сервере.
 
-Реестр (HKLM):
-  ...\\Terminal Services\\Shadow
-    1 — полный контроль С подтверждения пользователя (обычный режим);
-    2 — полный контроль БЕЗ подтверждения (экстренный режим).
+Реестр (HKLM ...\\Terminal Services\\Shadow):
+  1 — с подтверждения пользователя (обычный); 2 — без подтверждения (экстренный).
+Удалённый сервер — через winreg.ConnectRegistry(\\\\ИМЯ).
 
-Экстренный режим включается временно. Возврат к «с подтверждением» гарантирует
-ОДНОРАЗОВОЕ ЗАДАНИЕ ПЛАНИРОВЩИКА от SYSTEM: оно вернёт Shadow=1 через N минут,
-даже если это приложение закрыто или зависло. Это ключевое требование —
-«системный таймер, не зависящий от программы».
+Экстренный режим временно ставит Shadow=2 и создаёт ОДНОРАЗОВОЕ ЗАДАНИЕ
+ПЛАНИРОВЩИКА от SYSTEM (локально — PowerShell, удалённо — schtasks /s), которое
+вернёт Shadow=1 через N минут — даже если приложение закрыто. Смена Shadow не
+роняет уже поднятые теневые соединения (реестр читается при инициации сеанса).
 
-Смена значения Shadow не роняет уже поднятые теневые соединения: реестр читается
-только при инициации нового сеанса.
-
-Файл состояния (policy_state.json) — только для обратного отсчёта в интерфейсе;
-настоящую гарантию даёт задание планировщика, а не он.
+Состояние для UI (обратный отсчёт) — в policy_state.json, по ключу сервера
+("" = локальный). Настоящую гарантию даёт задание, а не файл.
 """
 
 from __future__ import annotations
@@ -38,64 +34,91 @@ SHADOW_WITH_CONSENT = 1
 SHADOW_NO_CONSENT = 2
 
 
-# ---------- состояние для UI ----------
+# ---------- состояние для UI (по серверу) ----------
 
-def _read_state() -> dict:
+def _read_all() -> dict:
     try:
         return json.loads(_STATE_FILE.read_text(encoding="utf-8"))
     except (FileNotFoundError, json.JSONDecodeError):
         return {}
 
 
-def _write_state(active: bool, minutes: int) -> None:
-    data = {"active": active, "minutes": minutes,
-            "end_epoch": int(time.time()) + minutes * 60 if active else 0}
-    _STATE_FILE.write_text(json.dumps(data), encoding="utf-8")
+def _read_state(server: str) -> dict:
+    return _read_all().get(server or "", {})
 
 
-def _clear_state() -> None:
-    try:
-        _STATE_FILE.unlink()
-    except FileNotFoundError:
-        pass
+def _write_state(server: str, active: bool, minutes: int) -> None:
+    data = _read_all()
+    data[server or ""] = {
+        "active": active, "minutes": minutes,
+        "end_epoch": int(time.time()) + minutes * 60 if active else 0,
+    }
+    _STATE_FILE.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
 
 
-# ---------- реестр ----------
+def _clear_state(server: str) -> None:
+    data = _read_all()
+    data.pop(server or "", None)
+    _STATE_FILE.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
 
-def _get_shadow() -> int:
+
+# ---------- реестр (локально/удалённо) ----------
+
+def _get_shadow(server: str = "") -> int:
     if sys.platform != "win32":
-        return SHADOW_NO_CONSENT if _read_state().get("active") else SHADOW_WITH_CONSENT
+        return SHADOW_NO_CONSENT if _read_state(server).get("active") else SHADOW_WITH_CONSENT
     import winreg
+    host = server.split(":", 1)[0] if server else server
     try:
-        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, _REG_PATH, 0, winreg.KEY_READ) as k:
+        root = winreg.ConnectRegistry(f"\\\\{host}" if host else None,
+                                      winreg.HKEY_LOCAL_MACHINE)
+        with winreg.OpenKey(root, _REG_PATH, 0, winreg.KEY_READ) as k:
             value, _ = winreg.QueryValueEx(k, _REG_VALUE)
             return int(value)
     except FileNotFoundError:
-        return SHADOW_WITH_CONSENT  # значения нет — считаем обычный режим
+        return SHADOW_WITH_CONSENT
+    except OSError:
+        return SHADOW_WITH_CONSENT  # сервер недоступен — считаем обычный режим
 
 
-def _set_shadow(value: int) -> None:
+def _set_shadow(server: str, value: int) -> None:
     if sys.platform != "win32":
         return
     import winreg
-    with winreg.CreateKeyEx(winreg.HKEY_LOCAL_MACHINE, _REG_PATH, 0,
-                            winreg.KEY_SET_VALUE | winreg.KEY_READ) as k:
+    host = server.split(":", 1)[0] if server else server
+    root = winreg.ConnectRegistry(f"\\\\{host}" if host else None,
+                                  winreg.HKEY_LOCAL_MACHINE)
+    with winreg.CreateKeyEx(root, _REG_PATH, 0, winreg.KEY_SET_VALUE | winreg.KEY_READ) as k:
         winreg.SetValueEx(k, _REG_VALUE, 0, winreg.REG_DWORD, value)
 
 
-# ---------- задание планировщика (гарантия возврата) ----------
+# ---------- задание-возврат ----------
 
-def _schedule_revert(minutes: int) -> None:
-    """Создать одноразовое задание от SYSTEM: вернуть Shadow=1 через N минут."""
+def _reg_revert_arg() -> str:
+    return (r'add "HKLM\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services" '
+            r'/v Shadow /t REG_DWORD /d 1 /f')
+
+
+def _schedule_revert(minutes: int, server: str) -> None:
     if sys.platform != "win32":
         return
-    reg_arg = (r'add "HKLM\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services" '
-               r'/v Shadow /t REG_DWORD /d 1 /f')
+    if server:
+        # удалённо — schtasks /s (время в формате локали сервера; берём HH:MM + дата)
+        when = time.localtime(time.time() + minutes * 60)
+        st = time.strftime("%H:%M", when)
+        sd = time.strftime("%m/%d/%Y", when)
+        subprocess.run(
+            ["schtasks", "/create", "/s", server, "/tn", _TASK_NAME, "/ru", "SYSTEM",
+             "/sc", "once", "/st", st, "/sd", sd, "/rl", "HIGHEST", "/f",
+             "/tr", "reg.exe " + _reg_revert_arg()],
+            capture_output=True, timeout=30, creationflags=_NO_WINDOW)
+        return
+    # локально — PowerShell Register-ScheduledTask с авто-удалением
     ps = f"""
 $ErrorActionPreference='Stop'
 $name='{_TASK_NAME}'
 Unregister-ScheduledTask -TaskName $name -Confirm:$false -ErrorAction SilentlyContinue
-$act=New-ScheduledTaskAction -Execute 'reg.exe' -Argument '{reg_arg}'
+$act=New-ScheduledTaskAction -Execute 'reg.exe' -Argument '{_reg_revert_arg()}'
 $trg=New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes({minutes})
 $trg.EndBoundary=((Get-Date).AddMinutes({minutes} + 60)).ToString('yyyy-MM-ddTHH:mm:ss')
 $set=New-ScheduledTaskSettingsSet -DeleteExpiredTaskAfter (New-TimeSpan -Minutes 10) -ExecutionTimeLimit (New-TimeSpan -Minutes 10) -MultipleInstances IgnoreNew
@@ -106,43 +129,46 @@ Register-ScheduledTask -TaskName $name -Action $act -Trigger $trg -Settings $set
                    capture_output=True, timeout=30, creationflags=_NO_WINDOW)
 
 
-def _cancel_revert() -> None:
+def _cancel_revert(server: str) -> None:
     if sys.platform != "win32":
         return
-    ps = f"Unregister-ScheduledTask -TaskName '{_TASK_NAME}' -Confirm:$false -ErrorAction SilentlyContinue"
-    subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", ps],
+    if server:
+        subprocess.run(["schtasks", "/delete", "/s", server, "/tn", _TASK_NAME, "/f"],
+                       capture_output=True, timeout=30, creationflags=_NO_WINDOW)
+        return
+    subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command",
+                    f"Unregister-ScheduledTask -TaskName '{_TASK_NAME}' -Confirm:$false -ErrorAction SilentlyContinue"],
                    capture_output=True, timeout=30, creationflags=_NO_WINDOW)
 
 
 # ---------- публичное API ----------
 
-def is_emergency_active() -> bool:
-    return _get_shadow() == SHADOW_NO_CONSENT
+def is_emergency_active(server: str = "") -> bool:
+    return _get_shadow(server) == SHADOW_NO_CONSENT
 
 
-def get_policy() -> dict:
-    """Состояние для UI: active + сколько секунд до авто-возврата + minutes."""
-    active = is_emergency_active()
-    state = _read_state()
+def get_policy(server: str = "") -> dict:
+    active = is_emergency_active(server)
+    state = _read_state(server)
     minutes = int(state.get("minutes", 15))
     remaining = 0
     if active:
         end = int(state.get("end_epoch", 0))
         remaining = max(end - int(time.time()), 0) if end else minutes * 60
-    return {"active": active, "remaining": remaining, "minutes": minutes}
+    return {"active": active, "remaining": remaining, "minutes": minutes, "server": server}
 
 
-def enable_emergency(minutes: int) -> dict:
-    _set_shadow(SHADOW_NO_CONSENT)
-    _schedule_revert(minutes)
-    _write_state(True, minutes)
-    audit.log("policy:emergency-on", "", "", f"{minutes}min")
-    return get_policy()
+def enable_emergency(minutes: int, server: str = "") -> dict:
+    _set_shadow(server, SHADOW_NO_CONSENT)
+    _schedule_revert(minutes, server)
+    _write_state(server, True, minutes)
+    audit.log("policy:emergency-on", server, "", f"{minutes}min")
+    return get_policy(server)
 
 
-def disable_emergency() -> dict:
-    _set_shadow(SHADOW_WITH_CONSENT)
-    _cancel_revert()
-    _clear_state()
-    audit.log("policy:emergency-off", "", "", "manual")
-    return get_policy()
+def disable_emergency(server: str = "") -> dict:
+    _set_shadow(server, SHADOW_WITH_CONSENT)
+    _cancel_revert(server)
+    _clear_state(server)
+    audit.log("policy:emergency-off", server, "", "manual")
+    return get_policy(server)

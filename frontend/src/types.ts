@@ -10,6 +10,17 @@ export interface Session {
   state: SessionState;
   idle: string;      // время простоя, как отдаёт quser ("нет", "2 мин", ...)
   you: boolean;      // это сеанс самого администратора
+  ram_mb?: number;   // ОЗУ сеанса, МБ (если сбор ресурсов включён)
+  cpu_pct?: number;  // ЦПУ сеанса, % (если сбор ресурсов включён)
+}
+
+/** Загрузка сервера. */
+export interface ServerLoad {
+  cpu?: number;          // ЦПУ %
+  ram_pct?: number;      // ОЗУ занято, %
+  ram_used_mb?: number;
+  ram_total_mb?: number;
+  source: string;        // zabbix | wmi | demo | none
 }
 
 /** Вид теневого подключения. */
@@ -23,8 +34,12 @@ export type Channel = "latest" | "dev";
 
 /** Настройки приложения. */
 export interface Settings {
+  mode: "manager" | "local";
   channel: Channel;
-  policyMinutes: number; // таймер авто-возврата экстренного режима
+  policyMinutes: number;   // таймер авто-возврата экстренного режима
+  showResources: boolean;  // показывать ЦПУ/ОЗУ
+  zabbixUrl: string;
+  zabbixConfigured: boolean;
 }
 
 /** Состояние экстренной политики. */
@@ -54,4 +69,44 @@ export interface UpdateNotice {
   version?: string;
   current?: string;
   channel?: Channel;
+}
+
+/** Кластер: имя + список серверов. */
+export interface Cluster { name: string; servers: string[]; profile?: string; zabbix?: { url: string }; }
+
+/** Профиль учётной записи (пароль хранится в Credential Manager, не здесь). */
+export interface Profile { name: string; domain: string; username: string; kind: string; saved?: boolean; }
+
+/** Учётная запись сервера. */
+export interface ServerAuth {
+  mode: "local" | "profile" | "explicit";
+  profile?: string;
+  domain?: string;
+  username?: string;
+}
+
+/** Конфигурация сервера в реестре. */
+export interface ServerCfg { auth?: ServerAuth; zabbix?: { url: string; configured: boolean }; displayName?: string; showIp?: boolean; authSaved?: boolean; }
+
+/** Реестр серверов и кластеров. */
+export interface Registry {
+  clusters: Cluster[];
+  servers: string[];
+  profiles: Profile[];
+  serverConfig: Record<string, ServerCfg>;
+}
+
+/** Результат опроса одного сервера. */
+export interface ServerPoll {
+  server: string;
+  ok: boolean;          // сервер ответил
+  sessions: Session[];  // его сеансы
+  error: string;        // причина, если ok=false
+  load?: ServerLoad;    // загрузка сервера (если ресурсы включены)
+}
+
+/** Итог импорта реестра. */
+export interface ImportResult {
+  added: { clusters: number; servers: number };
+  registry: Registry;
 }
