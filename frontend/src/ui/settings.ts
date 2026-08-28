@@ -32,7 +32,7 @@ export async function initSettings(a: ShadowApi, h: Hooks): Promise<void> {
         <div class="sec">
           <div class="sec-label">Список серверов</div>
           <div class="set-row">
-            <div class="s-text"><div class="s-title">Экспорт и импорт</div><div class="s-sub">Без паролей.</div></div>
+            <div class="s-text"><div class="s-title">Экспорт и импорт</div><div class="s-sub">Экспорт и импорт списка серверов. Без паролей.</div></div>
           </div>
           <div class="set-row">
             <button class="btn-line" data-export-reg>${icons.upload}Экспорт</button>
