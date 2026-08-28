@@ -172,6 +172,12 @@ class ServerRegistry:
         self._server_cfg(host)["auth"] = auth
         self._save()
 
+    def set_server_display(self, host: str, display_name: str, show_ip: bool) -> None:
+        cfg = self._server_cfg(host)
+        cfg["displayName"] = display_name.strip()
+        cfg["showIp"] = bool(show_ip)
+        self._save()
+
     def set_server_zabbix(self, host: str, url: str, configured: bool) -> None:
         self._server_cfg(host)["zabbix"] = {"url": url.strip(), "configured": bool(configured)}
         self._save()

@@ -52,6 +52,7 @@ export interface ShadowApi {
   setClusterProfile(name: string, profile: string): Promise<Registry>;
   setServerZabbix(host: string, url: string, token: string): Promise<Registry>;
   setClusterZabbix(name: string, url: string): Promise<Registry>;
+  setServerDisplay(host: string, displayName: string, showIp: boolean): Promise<Registry>;
   testServer(host: string): Promise<{ ok: boolean; error: string }>;
 
   getSettings(): Promise<Settings>;
@@ -102,6 +103,7 @@ class RealApi implements ShadowApi {
   setClusterProfile(name: string, profile: string) { return this.api.set_cluster_profile(name, profile); }
   setServerZabbix(host: string, url: string, token: string) { return this.api.set_server_zabbix(host, url, token); }
   setClusterZabbix(name: string, url: string) { return this.api.set_cluster_zabbix(name, url); }
+  setServerDisplay(host: string, displayName: string, showIp: boolean) { return this.api.set_server_display(host, displayName, showIp); }
   testServer(host: string) { return this.api.test_server(host); }
   getSettings() { return this.api.get_settings(); }
   setMode(mode: string) { return this.api.set_mode(mode); }
@@ -197,7 +199,8 @@ class MockApi implements ShadowApi {
   setClusterProfile(name: string, profile: string) { const c = this.registry.clusters.find((x) => x.name === name); if (c) c.profile = profile; return this.wait(structuredClone(this.registry)); }
   setServerZabbix(host: string, url: string, token: string) { (this.registry.serverConfig[host] ||= {}).zabbix = { url, configured: !!(url && token) }; return this.wait(structuredClone(this.registry)); }
   setClusterZabbix(name: string, url: string) { const c = this.registry.clusters.find((x) => x.name === name); if (c) c.zabbix = { url }; return this.wait(structuredClone(this.registry)); }
-  testServer(host: string) { return this.wait({ ok: host !== "TS-03", error: host === "TS-03" ? "недоступен" : "" }, 500); }
+  setServerDisplay(host: string, displayName: string, showIp: boolean) { (this.registry.serverConfig[host] ||= {}).displayName = displayName; this.registry.serverConfig[host].showIp = showIp; return this.wait(structuredClone(this.registry)); }
+  testServer(host: string) { return this.wait({ ok: host !== "TS-03", error: host === "TS-03" ? "RPC недоступен (порты 135/445 закрыты)" : "" }, 500); }
 
   getSettings() { return this.wait(this.settings); }
   setMode(mode: string) { this.settings.mode = mode as Settings["mode"]; return this.wait(undefined); }

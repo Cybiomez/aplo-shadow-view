@@ -4,8 +4,9 @@ import { api } from "./bridge";
 import type { ActionKind, PolicyState, Registry, ServerLoad, ServerPoll, Session } from "./types";
 import { icons } from "./ui/icons";
 import { initModal, isModalOpen, openModal } from "./ui/modal";
-import { initRegistryModal, openRegistry } from "./ui/registryModal";
+import { initRegistryModal, openRegistry, setModalRegistry } from "./ui/registryModal";
 import { initServerBar, selectedServers, setLoads, setRegistry } from "./ui/serverBar";
+import { serverLabel } from "./ui/serverSettings";
 import { initSettings, isSettingsOpen, openSettings, syncPolicy } from "./ui/settings";
 import { toast } from "./ui/toast";
 import { checkUpdateBubble } from "./ui/updateBubble";
@@ -62,6 +63,7 @@ const ACTIONS: Record<ActionKind, ActionDef> = {
 };
 
 let mode: "manager" | "local" = "manager";
+let appRegistry: Registry = { clusters: [], servers: [], profiles: [], serverConfig: {} };
 let rows: Row[] = [];
 let unreachable: string[] = [];
 let searchQuery = "";
@@ -235,7 +237,7 @@ function renderList(): void {
           <div class="name">${r.name}${you}</div>
           <div class="meta">${chip}<span class="sid mono">сеанс ${r.sid}</span><span>простой: ${r.idle}</span>${resBadge(r)}</div>
         </div>
-        <div class="server-col mono" title="Сервер">${r.server || "локально"}</div>
+        <div class="server-col mono" title="${r.server}">${r.server ? serverLabel(r.server, appRegistry) : "локально"}</div>
         <div class="actions">
           ${btn("view", "view", "Просмотр", true)}
           ${btn("control", "control", "Управление", true)}
@@ -486,10 +488,12 @@ export async function bootstrap(): Promise<void> {
   await initSettings(api, { onPolicyChange: paintPolicy });
 
   const registry: Registry = await api.getRegistry();
+  appRegistry = registry;
   await initRegistryModal({ onChange: (r) => setRegistry(r) });
   initServerBar(el<HTMLElement>("[data-serverbar]"), registry, {
     onSelectionChange: () => refresh(false),
-    onManage: openRegistry,
+    onManageCredentials: openRegistry,
+    onRegistryChange: (r) => { appRegistry = r; setModalRegistry(r); renderList(); },
   });
 
   bindActions();
