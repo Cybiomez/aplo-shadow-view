@@ -55,6 +55,7 @@ export interface ShadowApi {
   testServer(host: string): Promise<{ ok: boolean; error: string }>;
 
   getSettings(): Promise<Settings>;
+  setMode(mode: string): Promise<void>;
   setChannel(channel: string): Promise<void>;
   setPolicyMinutes(minutes: number): Promise<void>;
   setShowResources(on: boolean): Promise<void>;
@@ -103,6 +104,7 @@ class RealApi implements ShadowApi {
   setClusterZabbix(name: string, url: string) { return this.api.set_cluster_zabbix(name, url); }
   testServer(host: string) { return this.api.test_server(host); }
   getSettings() { return this.api.get_settings(); }
+  setMode(mode: string) { return this.api.set_mode(mode); }
   setChannel(channel: string) { return this.api.set_channel(channel); }
   setPolicyMinutes(minutes: number) { return this.api.set_policy_minutes(minutes); }
   setShowResources(on: boolean) { return this.api.set_show_resources(on); }
@@ -136,7 +138,7 @@ class MockApi implements ShadowApi {
     { name: "a.kozlov", sid: 2, state: "disc", idle: "—", you: false },
     { name: "d.morozov", sid: 6, state: "disc", idle: "5 сут", you: false },
   ];
-  private settings: Settings = { channel: "latest", policyMinutes: 15, showResources: true, zabbixUrl: "", zabbixConfigured: false };
+  private settings: Settings = { mode: "manager", channel: "latest", policyMinutes: 15, showResources: true, zabbixUrl: "", zabbixConfigured: false };
   private policy: PolicyState = { active: false, remaining: 0, minutes: 15 };
   private timer: number | null = null;
 
@@ -198,6 +200,7 @@ class MockApi implements ShadowApi {
   testServer(host: string) { return this.wait({ ok: host !== "TS-03", error: host === "TS-03" ? "недоступен" : "" }, 500); }
 
   getSettings() { return this.wait(this.settings); }
+  setMode(mode: string) { this.settings.mode = mode as Settings["mode"]; return this.wait(undefined); }
   setChannel(channel: string) { this.settings.channel = channel as Settings["channel"]; return this.wait(undefined); }
   setPolicyMinutes(minutes: number) { this.settings.policyMinutes = minutes; this.policy.minutes = minutes; return this.wait(undefined); }
   setShowResources(on: boolean) { this.settings.showResources = on; return this.wait(undefined); }

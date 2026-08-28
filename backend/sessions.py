@@ -17,6 +17,11 @@ import re
 import subprocess
 import sys
 
+def _host_only(server: str) -> str:
+    """Отбросить :порт — quser/RPC идут по стандартным портам, не по RDP-порту."""
+    return server.split(':', 1)[0] if server else server
+
+
 _ACTIVE_WORDS = ("active", "активно", "активн")
 
 
@@ -75,7 +80,7 @@ def list_sessions(server: str = "") -> list[dict]:
         ]
     cmd = ["quser"]
     if server:
-        cmd.append(f"/server:{server}")
+        cmd.append(f"/server:{_host_only(server)}")
     try:
         raw = subprocess.run(
             cmd, capture_output=True, timeout=10,
@@ -98,7 +103,7 @@ def probe(server: str) -> dict:
         return {"server": server, "ok": True, "sessions": list_sessions(server), "error": ""}
     cmd = ["quser"]
     if server:
-        cmd.append(f"/server:{server}")
+        cmd.append(f"/server:{_host_only(server)}")
     try:
         proc = subprocess.run(
             cmd, capture_output=True, timeout=10,

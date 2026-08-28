@@ -18,6 +18,7 @@ from pathlib import Path
 APP_DIR_NAME = "AploShadowView"
 
 DEFAULTS = {
+    "mode": "manager",         # manager (удалённый пульт) | local (только этот сервер)
     "channel": "latest",       # latest | dev
     "policyMinutes": 15,       # 5 | 15 | 30
     "showResources": True,     # показывать ЦПУ/ОЗУ (тяжелее опрос)
@@ -73,6 +74,16 @@ class Config:
             self._save()
 
     @property
+    def mode(self) -> str:
+        return self._data.get("mode", "manager")
+
+    @mode.setter
+    def mode(self, value: str) -> None:
+        if value in ("manager", "local"):
+            self._data["mode"] = value
+            self._save()
+
+    @property
     def show_resources(self) -> bool:
         return bool(self._data.get("showResources", True))
 
@@ -120,6 +131,7 @@ class Config:
     def as_dict(self) -> dict:
         url, token = self.zabbix
         return {
+            "mode": self.mode,
             "channel": self.channel,
             "policyMinutes": self.policy_minutes,
             "showResources": self.show_resources,

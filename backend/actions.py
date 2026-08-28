@@ -23,6 +23,10 @@ from . import audit, policy
 _NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 
+def _host_only(server: str) -> str:
+    return server.split(':', 1)[0] if server else server
+
+
 def _result(ok: bool, message: str) -> dict:
     return {"ok": ok, "message": message}
 
@@ -74,7 +78,7 @@ def disconnect(sid: int, server: str = "") -> dict:
         return _result(True, f"(демо) Сеанс {who}{_at(server)} отключён")
     cmd = ["tsdiscon", str(sid)]
     if server:
-        cmd.append(f"/server:{server}")
+        cmd.append(f"/server:{_host_only(server)}")
     try:
         subprocess.run(cmd, capture_output=True, timeout=10, creationflags=_NO_WINDOW)
     except (OSError, subprocess.SubprocessError) as e:
@@ -91,7 +95,7 @@ def logoff(sid: int, server: str = "") -> dict:
         return _result(True, f"(демо) Пользователь {who}{_at(server)} выведен из системы")
     cmd = ["logoff", str(sid)]
     if server:
-        cmd.append(f"/server:{server}")
+        cmd.append(f"/server:{_host_only(server)}")
     try:
         subprocess.run(cmd, capture_output=True, timeout=10, creationflags=_NO_WINDOW)
     except (OSError, subprocess.SubprocessError) as e:

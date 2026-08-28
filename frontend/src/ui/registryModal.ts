@@ -93,7 +93,7 @@ function renderList(): void {
       <span class="rs-name mono">${host}</span>
       <div class="grow"></div>
       <span class="rs-auth" title="Учётная запись">${authSelect(host)}</span>
-      <button class="reg-mini" data-test="${enc(host)}" title="Проверить доступность">тест</button>
+      <button class="reg-mini" data-test="${enc(host)}" title="Проверить доступ по сети (RPC/SMB) под выбранной учёткой — получится ли список сеансов">Проверить</button>
       <button class="reg-x" data-del-server="${enc(host)}" data-in="${enc(cluster)}" aria-label="Убрать">${icons.close}</button>
     </div>`;
 
@@ -141,8 +141,8 @@ function bindRows(box: HTMLElement): void {
       const host = decodeURIComponent(b.dataset.test!);
       b.textContent = "…"; b.disabled = true;
       const res = await api.testServer(host);
-      b.textContent = "тест"; b.disabled = false;
-      toast(res.ok ? `${host}: доступен` : `${host}: ${res.error || "недоступен"}`, res.ok ? "ok" : "err");
+      b.textContent = "Проверить"; b.disabled = false;
+      toast(res.ok ? `${host}: доступен — список сеансов получен` : `${host}: не удалось (${res.error || "нет доступа по RPC/SMB"})`, res.ok ? "ok" : "err");
     }));
   box.querySelectorAll<HTMLSelectElement>("[data-auth]").forEach((sel) =>
     sel.addEventListener("change", () => onAuthChange(decodeURIComponent(sel.dataset.auth!), sel.value)));

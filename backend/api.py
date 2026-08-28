@@ -234,6 +234,9 @@ class Api:
     def get_settings(self) -> dict:
         return self._config.as_dict()
 
+    def set_mode(self, mode: str) -> None:
+        self._config.mode = mode
+
     def set_channel(self, channel: str) -> None:
         self._config.channel = channel
 
