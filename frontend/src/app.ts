@@ -1,18 +1,16 @@
 // Главный экран (v2, мультисервер): панель серверов, список сеансов с колонкой
 // «Сервер», массовые операции, поиск, сортировка. Опрашивается только выбранное.
 import { api } from "./bridge";
-import type { ActionKind, PolicyState, Registry, ServerLoad, ServerPoll, Session } from "./types";
+import type { ActionKind, PolicyState, Registry, Session } from "./types";
 import { icons } from "./ui/icons";
 import { initModal, isModalOpen, openModal } from "./ui/modal";
 import { initRegistryModal, openRegistry, setModalRegistry } from "./ui/registryModal";
-import { initServerBar, selectedServers, setLoads, setRegistry } from "./ui/serverBar";
+import { initServerBar, selectedServers, setRegistry } from "./ui/serverBar";
 import { serverLabel } from "./ui/serverSettings";
 import { initSettings, isSettingsOpen, openSettings, syncPolicy } from "./ui/settings";
 import { toast } from "./ui/toast";
-import { checkUpdateBubble } from "./ui/updateBubble";
 
-const AUTO_REFRESH_MS = 60_000;
-const UPDATE_CHECK_MS = 6 * 60 * 60 * 1000;
+const POLL_MS = 10_000; // опрос серверов раз в 10 сек
 
 type SortField = "name" | "status" | "idle" | "server";
 type SortDir = "asc" | "desc";
@@ -73,7 +71,6 @@ const selectedRows = new Set<string>(); // ключ "server|sid"
 let lastRefresh = Date.now();
 let polling = false;
 let polledServers = new Set<string>();
-const RESOURCE_MS = 3000;
 let policyTicker: number | null = null;
 
 function rowKey(r: { server: string; sid: number }): string {
@@ -209,18 +206,6 @@ function hasSelection(): boolean {
   return selectedRows.size > 0;
 }
 
-function fmtMb(mb: number): string {
-  return mb >= 1024 ? `${(mb / 1024).toFixed(1)} ГБ` : `${mb} МБ`;
-}
-function resBadge(r: Row): string {
-  const has = r.cpu_pct != null || r.ram_mb != null;
-  if (!has) return "";
-  const parts: string[] = [];
-  if (r.cpu_pct != null) parts.push(`ЦПУ ${r.cpu_pct}%`);
-  if (r.ram_mb != null) parts.push(`ОЗУ ${fmtMb(r.ram_mb)}`);
-  return `<span class="res">${parts.join(" · ")}</span>`;
-}
-
 function renderList(): void {
   const list = el<HTMLElement>("[data-list]");
   const savedScroll = list.scrollTop;
@@ -251,7 +236,7 @@ function renderList(): void {
         <div class="avatar" aria-hidden="true">${initials(r.name)}</div>
         <div class="who">
           <div class="name">${r.name}${you}</div>
-          <div class="meta">${chip}<span class="sid mono">сеанс ${r.sid}</span><span>простой: ${fmtIdle(r.idle)}</span>${resBadge(r)}</div>
+          <div class="meta">${chip}<span class="sid mono">сеанс ${r.sid}</span><span>простой: ${fmtIdle(r.idle)}</span></div>
         </div>
         <div class="server-col mono" title="${r.server}">${r.server ? serverLabel(r.server, appRegistry) : "локально"}</div>
         <div class="actions">
@@ -287,34 +272,39 @@ function renderMassbar(): void {
 /** Изменился выбор серверов: снятые убираем МГНОВЕННО, добавленные опрашиваем за кадром. */
 function onSelectionChanged(servers: string[]): void {
   const sel = new Set(servers);
-  // мгновенно: убрать строки/недоступные снятых серверов + перерисовать
   rows = rows.filter((r) => sel.has(r.server));
   unreachable = unreachable.filter((u) => sel.has(u.server));
-  const present = new Set(rows.map(rowKey));
-  for (const k of [...selectedRows]) if (!present.has(k)) selectedRows.delete(k);
+  cleanupSelection();
   polledServers = new Set([...polledServers].filter((x) => sel.has(x)));
   renderList();
-  // за кадром: опросить только новые
   const added = servers.filter((x) => !polledServers.has(x));
-  if (added.length) pollAppend(added);
+  if (added.length) pollTick(added);
 }
 
-async function pollAppend(servers: string[]): Promise<void> {
-  polling = true;
-  if (rows.length === 0) renderList();
-  const polls: ServerPoll[] = await api.pollServers(servers);
-  polling = false;
-  const loads: Record<string, ServerLoad> = {};
-  for (const p of polls) {
-    polledServers.add(p.server);
-    if (p.load) loads[p.server] = p.load;
-    if (!p.ok) { if (!unreachable.some((u) => u.server === p.server)) unreachable.push({ server: p.server, error: p.error }); continue; }
-    for (const sess of p.sessions) rows.push({ ...sess, server: p.server });
+function cleanupSelection(): void {
+  const present = new Set(rows.map(rowKey));
+  for (const k of [...selectedRows]) if (!present.has(k)) selectedRows.delete(k);
+}
+
+/** Асинхронный опрос: каждый сервер сам по себе; пришли данные — заменяем ЕГО
+ * строки и перерисовываем. Список не сбрасывается, дублей нет (строки сервера
+ * заменяются целиком). */
+function pollTick(servers: string[]): void {
+  for (const srv of servers) {
+    api.pollServers([srv]).then((polls) => {
+      const p = polls[0];
+      if (!p) return;
+      rows = rows.filter((r) => r.server !== srv);           // убрать прежние строки сервера
+      unreachable = unreachable.filter((u) => u.server !== srv);
+      polledServers.add(srv);
+      if (!p.ok) unreachable.push({ server: srv, error: p.error });
+      else for (const sess of p.sessions) rows.push({ ...sess, server: srv });
+      cleanupSelection();
+      renderList();
+      lastRefresh = Date.now();
+      el<HTMLElement>("[data-refresh-info]").textContent = "обновлено только что";
+    }).catch(() => { /* сервер не ответил — молча, останется без строк */ });
   }
-  setLoads(loads);
-  renderList();
-  lastRefresh = Date.now();
-  el<HTMLElement>("[data-refresh-info]").textContent = "обновлено только что";
 }
 
 async function refresh(manual: boolean): Promise<void> {
@@ -325,9 +315,7 @@ async function refresh(manual: boolean): Promise<void> {
     polling = false;
     rows = sessions.map((s) => ({ ...s, server: "" }));
     unreachable = [];
-    setLoads({});
-    const present = new Set(rows.map(rowKey));
-    for (const k of [...selectedRows]) if (!present.has(k)) selectedRows.delete(k);
+    cleanupSelection();
     renderList();
     lastRefresh = Date.now();
     el<HTMLElement>("[data-refresh-info]").textContent = "обновлено только что";
@@ -341,10 +329,8 @@ async function refresh(manual: boolean): Promise<void> {
     el<HTMLElement>("[data-refresh-info]").textContent = "—";
     return;
   }
-  // полный переопрос всего выбранного (кнопка «Обновить» / авто раз в минуту)
-  rows = []; unreachable = []; polledServers.clear();
   if (manual) { const b = el<HTMLElement>("[data-refresh]"); b.classList.remove("spin"); void b.offsetWidth; b.classList.add("spin"); }
-  await pollAppend(servers);
+  pollTick(servers); // переопрос всех выбранных, каждый обновится по готовности
 }
 
 function fmtAgo(sec: number): string {
@@ -522,26 +508,6 @@ function applyMode(): void {
   refresh(false);
 }
 
-async function refreshResources(): Promise<void> {
-  if (mode !== "manager") return;
-  const servers = selectedServers().filter((x) => polledServers.has(x));
-  if (!servers.length) return;
-  let res;
-  try { res = await api.getResources(servers); } catch { return; }
-  const loads: Record<string, ServerLoad> = {};
-  for (const srv of Object.keys(res)) {
-    const data = res[srv];
-    if (data.load) loads[srv] = data.load;
-    for (const r of rows) {
-      if (r.server !== srv) continue;
-      const sr = data.sessions[String(r.sid)];
-      if (sr) { r.ram_mb = sr.ram_mb; r.cpu_pct = sr.cpu_pct; }
-    }
-  }
-  setLoads(loads);
-  renderList();
-}
-
 export async function bootstrap(): Promise<void> {
   document.getElementById("app")!.innerHTML = template();
   initModal();
@@ -568,17 +534,19 @@ export async function bootstrap(): Promise<void> {
   applyMode();
   paintPolicy(await api.getPolicy());
 
-  const hook = { onOpenSettings: openSettings };
-  checkUpdateBubble(hook);
-  setInterval(() => checkUpdateBubble(hook), UPDATE_CHECK_MS);
-
-  // #1: ресурсы (ЦПУ/ОЗУ) обновляем часто, не трогая опрос сеансов
-  setInterval(refreshResources, RESOURCE_MS);
+  // уведомление об обновлении — только точка на кнопке настроек (без баббла)
+  api.checkUpdate().then((info) => {
+    if (info.available) el<HTMLElement>("[data-settings]").classList.add("has-update");
+  }).catch(() => {});
 
   setInterval(() => {
     const sec = Math.round((Date.now() - lastRefresh) / 1000);
-    const active = mode === "local" || selectedServers().length > 0;
-    if (active) el<HTMLElement>("[data-refresh-info]").textContent = fmtAgo(sec);
-    if (sec >= AUTO_REFRESH_MS / 1000 && active) refresh(false);
+    if (mode === "local" || selectedServers().length > 0)
+      el<HTMLElement>("[data-refresh-info]").textContent = fmtAgo(sec);
   }, 1000);
+  // опрос раз в 10 сек (асинхронно по серверам)
+  setInterval(() => {
+    if (mode === "local") refresh(false);
+    else if (selectedServers().length) pollTick(selectedServers());
+  }, POLL_MS);
 }

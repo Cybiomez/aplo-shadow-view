@@ -1,7 +1,7 @@
 // Панель серверов (режим «Менеджер»): плоский список серверов локальной сети,
 // добавляются вручную. Опрашивается только выбранное. Без кластеров.
 import { api } from "../bridge";
-import type { Registry, ServerLoad } from "../types";
+import type { Registry } from "../types";
 import { icons } from "./icons";
 import { openServerForm, serverLabel } from "./serverSettings";
 
@@ -15,7 +15,6 @@ let host: HTMLElement;
 let hooks: Hooks;
 let registry: Registry = { clusters: [], servers: [], profiles: [], serverConfig: {} };
 const selected = new Set<string>();
-let loads: Record<string, ServerLoad> = {};
 
 export function initServerBar(mount: HTMLElement, reg: Registry, h: Hooks): void {
   host = mount;
@@ -33,8 +32,6 @@ export function setRegistry(reg: Registry): void {
 }
 
 export function selectedServers(): string[] { return [...selected]; }
-export function setLoads(map: Record<string, ServerLoad>): void { loads = map || {}; render(); }
-
 const enc = encodeURIComponent;
 
 /** Все серверы — плоско (кластеры не используются в UI, но совместимость сохранена). */
@@ -46,16 +43,6 @@ function allServers(): string[] {
 function emit(): void { hooks.onSelectionChange([...selected]); }
 function propagate(reg: Registry): void { registry = reg; render(); emit(); hooks.onRegistryChange(reg); }
 
-function loadBadge(server: string): string {
-  const l = loads[server];
-  if (!l || (l.cpu == null && l.ram_pct == null)) return "";
-  const parts: string[] = [];
-  if (l.cpu != null) parts.push(`ЦПУ ${l.cpu}%`);
-  if (l.ram_pct != null) parts.push(`ОЗУ ${l.ram_pct}%`);
-  const hot = (l.cpu ?? 0) >= 85 || (l.ram_pct ?? 0) >= 90 ? " hot" : "";
-  return `<span class="sb-load${hot}">${parts.join(" · ")}</span>`;
-}
-
 function render(): void {
   const servers = allServers();
   const cardsHtml = servers.length
@@ -64,7 +51,6 @@ function render(): void {
         return `<div class="sb-card${on}">
           <label class="sb-pick"><input type="checkbox" data-server="${enc(srv)}" ${selected.has(srv) ? "checked" : ""}/>
             <span class="sb-srv-name">${serverLabel(srv, registry)}</span></label>
-          ${loadBadge(srv)}
           <button class="sb-cfg" data-cfg="${enc(srv)}" title="Данные и настройки сервера">${icons.gear}</button>
           <button class="sb-del" data-del="${enc(srv)}" title="Убрать сервер">${icons.close}</button>
         </div>`;

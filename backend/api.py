@@ -63,23 +63,6 @@ class Api:
             url, token = self._config.zabbix  # глобальный запасной
         return url, token
 
-    def get_resources(self, servers: list) -> dict:
-        """Только ресурсы (загрузка сервера + ЦПУ/ОЗУ по сеансам) — для частого
-        обновления, без переопроса сеансов. {server: {load, sessions:{sid:{...}}}}."""
-        names = [s for s in (servers or []) if s]
-        if not names or not self._config.show_resources:
-            return {}
-        from concurrent.futures import ThreadPoolExecutor
-
-        def one(server: str) -> tuple:
-            z_url, z_tok = self._zabbix_for(server)
-            load = resources.server_load(server, z_url, z_tok)
-            sess = resources.session_resources(server)
-            return server, {"load": load, "sessions": sess}
-
-        with ThreadPoolExecutor(max_workers=min(8, len(names))) as ex:
-            return dict(ex.map(one, names))
-
     def poll_servers(self, servers: list) -> list:
         """Параллельный опрос ТОЛЬКО переданных серверов (то, что открыто по фильтрам).
         Возвращает список {server, ok, sessions, error, load?}. Один зависший не
@@ -88,25 +71,13 @@ class Api:
         names = [s for s in (servers or []) if s]
         if not names:
             return []
-        show = self._config.show_resources
-
-        def enrich(server: str) -> dict:
+        def one(server: str) -> dict:
             self._apply_creds(server)
-            p = probe(server)
-            if show and p.get("ok"):
-                z_url, z_tok = self._zabbix_for(server)
-                p["load"] = resources.server_load(server, z_url, z_tok)
-                res = resources.session_resources(server)
-                for sess in p.get("sessions", []):
-                    r = res.get(str(sess["sid"]))
-                    if r:
-                        sess["ram_mb"] = r.get("ram_mb")
-                        sess["cpu_pct"] = r.get("cpu_pct")
-            return p
+            return probe(server)
 
         from concurrent.futures import ThreadPoolExecutor
         with ThreadPoolExecutor(max_workers=min(8, len(names))) as ex:
-            return list(ex.map(enrich, names))
+            return list(ex.map(one, names))
 
     def shadow(self, sid: int, mode: str, server: str = "") -> dict:
         return actions.shadow(int(sid), mode, server)
