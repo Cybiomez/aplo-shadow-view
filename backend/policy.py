@@ -68,8 +68,9 @@ def _get_shadow(server: str = "") -> int:
     if sys.platform != "win32":
         return SHADOW_NO_CONSENT if _read_state(server).get("active") else SHADOW_WITH_CONSENT
     import winreg
+    host = server.split(":", 1)[0] if server else server
     try:
-        root = winreg.ConnectRegistry(f"\\\\{server}" if server else None,
+        root = winreg.ConnectRegistry(f"\\\\{host}" if host else None,
                                       winreg.HKEY_LOCAL_MACHINE)
         with winreg.OpenKey(root, _REG_PATH, 0, winreg.KEY_READ) as k:
             value, _ = winreg.QueryValueEx(k, _REG_VALUE)
@@ -84,7 +85,8 @@ def _set_shadow(server: str, value: int) -> None:
     if sys.platform != "win32":
         return
     import winreg
-    root = winreg.ConnectRegistry(f"\\\\{server}" if server else None,
+    host = server.split(":", 1)[0] if server else server
+    root = winreg.ConnectRegistry(f"\\\\{host}" if host else None,
                                   winreg.HKEY_LOCAL_MACHINE)
     with winreg.CreateKeyEx(root, _REG_PATH, 0, winreg.KEY_SET_VALUE | winreg.KEY_READ) as k:
         winreg.SetValueEx(k, _REG_VALUE, 0, winreg.REG_DWORD, value)

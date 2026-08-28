@@ -61,6 +61,7 @@ const ACTIONS: Record<ActionKind, ActionDef> = {
   },
 };
 
+let mode: "manager" | "local" = "manager";
 let rows: Row[] = [];
 let unreachable: string[] = [];
 let searchQuery = "";
@@ -130,6 +131,10 @@ function template(): string {
       <div class="mark" aria-hidden="true">${icons.logo}</div>
       <div class="title"><h1>AploShadowView</h1><p>Теневой доступ к сеансам RDS</p></div>
       <div class="grow"></div>
+      <div class="mode-seg" data-mode role="group" aria-label="Режим">
+        <button data-m="manager" title="Управление удалёнными серверами">Менеджер</button>
+        <button data-m="local" title="Только сеансы этого сервера, как в 0.1.0">Локально</button>
+      </div>
       <button class="icon-btn" data-settings title="Настройки" aria-label="Настройки">${icons.gear}</button>
     </div>
 
@@ -206,7 +211,8 @@ function renderList(): void {
 
   if (items.length === 0) {
     let msg: string;
-    if (selectedServers().length === 0) msg = "Выберите серверы для просмотра на панели выше";
+    if (mode === "local") msg = polling ? "Опрашиваю этот сервер…" : "На этом сервере нет пользователей";
+    else if (selectedServers().length === 0) msg = "Выберите серверы для просмотра на панели выше";
     else if (searchQuery.trim()) msg = "Нет сеансов по запросу";
     else if (polling) msg = "Опрашиваю выбранные серверы…";
     else msg = "На выбранных серверах нет пользователей";
@@ -256,6 +262,22 @@ function renderMassbar(): void {
 }
 
 async function refresh(manual: boolean): Promise<void> {
+  if (mode === "local") {
+    polling = true;
+    if (rows.length === 0) renderList();
+    const sessions = await api.listSessions("");
+    polling = false;
+    rows = sessions.map((s) => ({ ...s, server: "" }));
+    unreachable = [];
+    setLoads({});
+    const present = new Set(rows.map(rowKey));
+    for (const k of [...selectedRows]) if (!present.has(k)) selectedRows.delete(k);
+    renderList();
+    lastRefresh = Date.now();
+    el<HTMLElement>("[data-refresh-info]").textContent = "обновлено только что";
+    if (manual) { const b = el<HTMLElement>("[data-refresh]"); b.classList.remove("spin"); void b.offsetWidth; b.classList.add("spin"); }
+    return;
+  }
   const servers = selectedServers();
   if (servers.length === 0) {
     rows = []; unreachable = [];
@@ -447,6 +469,15 @@ function bindActions(): void {
   });
 }
 
+function applyMode(): void {
+  const app = document.querySelector(".app")!;
+  app.classList.toggle("local-mode", mode === "local");
+  document.querySelectorAll<HTMLButtonElement>("[data-mode] button").forEach((b) =>
+    b.classList.toggle("on", b.dataset.m === mode));
+  selectedRows.clear();
+  refresh(false);
+}
+
 export async function bootstrap(): Promise<void> {
   document.getElementById("app")!.innerHTML = template();
   initModal();
@@ -462,7 +493,18 @@ export async function bootstrap(): Promise<void> {
 
   bindActions();
   bindSearchAndSort();
-  renderList(); // стартовый пустой экран
+
+  const settings = await api.getSettings();
+  mode = settings.mode || "manager";
+  document.querySelectorAll<HTMLButtonElement>("[data-mode] button").forEach((b) =>
+    b.addEventListener("click", async () => {
+      const m = b.dataset.m as "manager" | "local";
+      if (m === mode) return;
+      mode = m;
+      await api.setMode(m);
+      applyMode();
+    }));
+  applyMode(); // отрисует режим и запустит опрос (локальный сразу, менеджер — пусто)
   paintPolicy(await api.getPolicy());
 
   const hook = { onOpenSettings: openSettings };
@@ -471,7 +513,8 @@ export async function bootstrap(): Promise<void> {
 
   setInterval(() => {
     const sec = Math.round((Date.now() - lastRefresh) / 1000);
-    if (selectedServers().length) el<HTMLElement>("[data-refresh-info]").textContent = fmtAgo(sec);
-    if (sec >= AUTO_REFRESH_MS / 1000 && selectedServers().length) refresh(false);
+    const active = mode === "local" || selectedServers().length > 0;
+    if (active) el<HTMLElement>("[data-refresh-info]").textContent = fmtAgo(sec);
+    if (sec >= AUTO_REFRESH_MS / 1000 && active) refresh(false);
   }, 1000);
 }

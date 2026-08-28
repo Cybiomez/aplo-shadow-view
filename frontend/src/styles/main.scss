@@ -488,3 +488,20 @@ select.mini {
 .reg-foot { margin-top: 12px; }
 .reg-act.wide { width: 100%; grid-column: 1 / -1; }
 .cred-form { display: flex; flex-direction: column; gap: 9px; }
+
+/* ===== v2: режим Менеджер / Локально ===== */
+.mode-seg {
+  display: inline-flex; gap: 3px; padding: 3px; background: var(--surface-2);
+  border: 1px solid var(--border-strong); border-radius: 9px; flex: none;
+  button {
+    font: inherit; font-size: 12px; font-weight: 600; color: var(--muted);
+    background: transparent; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer;
+    &.on { background: var(--surface); color: var(--accent); box-shadow: var(--shadow); }
+  }
+}
+/* Локальный режим: панель серверов и колонка сервера не нужны */
+.app.local-mode .serverbar,
+.app.local-mode .server-col,
+.app.local-mode .unreach,
+.app.local-mode .sort-tg[data-field="server"] { display: none; }
+@media (max-width: 720px) { .mode-seg button { padding: 6px 9px; } }

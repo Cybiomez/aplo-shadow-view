@@ -34,6 +34,7 @@ export type Channel = "latest" | "dev";
 
 /** Настройки приложения. */
 export interface Settings {
+  mode: "manager" | "local";
   channel: Channel;
   policyMinutes: number;   // таймер авто-возврата экстренного режима
   showResources: boolean;  // показывать ЦПУ/ОЗУ
