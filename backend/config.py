@@ -18,7 +18,7 @@ from pathlib import Path
 APP_DIR_NAME = "AploShadowView"
 
 DEFAULTS = {
-    "mode": "manager",         # manager (удалённый пульт) | local (только этот сервер)
+    "mode": "local",           # local (этот сервер, основной) | manager (удалённый пульт, экспериментально)
     "channel": "latest",       # latest | dev
     "policyMinutes": 15,       # 5 | 15 | 30
     "showResources": True,     # показывать ЦПУ/ОЗУ (тяжелее опрос)
@@ -75,7 +75,7 @@ class Config:
 
     @property
     def mode(self) -> str:
-        return self._data.get("mode", "manager")
+        return self._data.get("mode", "local")
 
     @mode.setter
     def mode(self, value: str) -> None:
