@@ -133,10 +133,6 @@ function template(): string {
       <div class="mark" aria-hidden="true">${icons.logo}</div>
       <div class="title"><h1>AploShadowView <span class="app-ver" data-ver></span></h1><p>Теневой доступ к сеансам RDS</p></div>
       <div class="grow"></div>
-      <div class="mode-seg" data-mode role="group" aria-label="Режим">
-        <button data-m="manager" title="Управление удалёнными серверами">Менеджер</button>
-        <button data-m="local" title="Только сеансы этого сервера, как в 0.1.0">Локально</button>
-      </div>
       <button class="icon-btn" data-settings title="Настройки" aria-label="Настройки">${icons.gear}</button>
     </div>
 
@@ -475,6 +471,13 @@ function bindActions(): void {
   });
 }
 
+export function switchMode(m: "manager" | "local"): void {
+  if (m === mode) return;
+  mode = m;
+  api.setMode(m);
+  applyMode();
+}
+
 function applyMode(): void {
   const app = document.querySelector(".app")!;
   app.classList.toggle("local-mode", mode === "local");
@@ -489,7 +492,7 @@ export async function bootstrap(): Promise<void> {
   initModal();
   api.getVersion().then((v) => { const el = document.querySelector("[data-ver]"); if (el) el.textContent = "v" + v; });
 
-  await initSettings(api, { onPolicyChange: paintPolicy });
+  await initSettings(api, { onPolicyChange: paintPolicy, onModeChange: switchMode, currentMode: () => mode });
 
   const registry: Registry = await api.getRegistry();
   appRegistry = registry;
@@ -504,15 +507,7 @@ export async function bootstrap(): Promise<void> {
   bindSearchAndSort();
 
   const settings = await api.getSettings();
-  mode = settings.mode || "manager";
-  document.querySelectorAll<HTMLButtonElement>("[data-mode] button").forEach((b) =>
-    b.addEventListener("click", async () => {
-      const m = b.dataset.m as "manager" | "local";
-      if (m === mode) return;
-      mode = m;
-      await api.setMode(m);
-      applyMode();
-    }));
+  mode = settings.mode || "local";
   applyMode(); // отрисует режим и запустит опрос (локальный сразу, менеджер — пусто)
   paintPolicy(await api.getPolicy());
 
