@@ -3,8 +3,7 @@
 import { api } from "../bridge";
 import type { Registry, ServerLoad } from "../types";
 import { icons } from "./icons";
-import { textPrompt } from "./modal";
-import { openServerSettings, serverLabel } from "./serverSettings";
+import { openClusterForm, openServerForm, serverLabel } from "./serverSettings";
 
 interface Hooks {
   onSelectionChange(servers: string[]): void;
@@ -97,6 +96,10 @@ function render(): void {
         : '<span class="sb-hint">В кластере нет серверов — добавьте кнопкой «Сервер»</span>')
     : (tabs.length ? '<span class="sb-hint">Выберите кластер, затем серверы для просмотра</span>' : "");
 
+  const canEditCluster = activeCluster && activeCluster !== STANDALONE;
+  const clusterTools = canEditCluster
+    ? `<div class="sb-cluster-tools"><button class="sb-mini" data-edit-cluster>Редактировать кластер</button><button class="sb-mini danger" data-del-cluster>Удалить кластер</button></div>`
+    : "";
   host.innerHTML = `
     <div class="sb-top">
       <div class="sb-tabs">${tabsHtml}${emptyHint}</div>
@@ -106,6 +109,7 @@ function render(): void {
         <button class="sb-mbtn" data-creds>${icons.lock}<span>Учётные записи</span></button>
       </div>
     </div>
+    ${clusterTools}
     <div class="sb-servers">${cardsHtml}</div>`;
 
   bindTop();
@@ -120,9 +124,25 @@ function bindTop(): void {
       else { activeCluster = key; serversOf(key).forEach((s) => selected.add(s)); emit(); }
       render();
     }));
-  host.querySelector("[data-add-cluster]")?.addEventListener("click", addCluster);
-  host.querySelector("[data-add-server]")?.addEventListener("click", () => addServer());
+  host.querySelector("[data-add-cluster]")?.addEventListener("click", async () => {
+    const reg = await openClusterForm(registry, null);
+    if (reg) propagate(reg);
+  });
+  host.querySelector("[data-add-server]")?.addEventListener("click", async () => {
+    const def = activeCluster && activeCluster !== STANDALONE ? activeCluster : "";
+    const reg = await openServerForm(registry, null, def);
+    if (reg) propagate(reg);
+  });
   host.querySelector("[data-creds]")?.addEventListener("click", () => hooks.onManageCredentials());
+  host.querySelector("[data-edit-cluster]")?.addEventListener("click", async () => {
+    const reg = await openClusterForm(registry, activeCluster);
+    if (reg) propagate(reg);
+  });
+  host.querySelector("[data-del-cluster]")?.addEventListener("click", async () => {
+    const name = activeCluster!;
+    activeCluster = null;
+    propagate(await api.removeCluster(name)); // серверы сохранятся в «Без кластера»
+  });
 }
 
 function bindCards(): void {
@@ -135,7 +155,7 @@ function bindCards(): void {
   host.querySelectorAll<HTMLElement>("[data-cfg]").forEach((b) =>
     b.addEventListener("click", async () => {
       const srv = decodeURIComponent(b.dataset.cfg!);
-      const reg = await openServerSettings(srv, registry);
+      const reg = await openServerForm(registry, srv, "");
       if (reg) propagate(reg);
     }));
   host.querySelectorAll<HTMLElement>("[data-del]").forEach((b) =>
@@ -148,18 +168,3 @@ function bindCards(): void {
   host.querySelector("[data-none]")?.addEventListener("click", () => { serversOf(activeCluster!).forEach((s) => selected.delete(s)); render(); emit(); });
 }
 
-async function addCluster(): Promise<void> {
-  const name = await textPrompt("Новый кластер", "Имя кластера");
-  if (name) { const reg = await api.addCluster(name); activeCluster = name; propagate(reg); }
-}
-async function addServer(): Promise<void> {
-  const cluster = activeCluster && activeCluster !== STANDALONE ? activeCluster : "";
-  const name = await textPrompt(
-    cluster ? `Сервер в «${cluster}»` : "Новый сервер",
-    "Имя или IP (можно IP:порт)");
-  if (name) {
-    const reg = await api.addServer(name, cluster);
-    if (!cluster && !activeCluster) activeCluster = STANDALONE;
-    propagate(reg);
-  }
-}

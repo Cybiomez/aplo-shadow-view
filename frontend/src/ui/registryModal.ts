@@ -56,7 +56,7 @@ function renderList(): void {
     ? registry.profiles.map((p) => `
       <div class="reg-profile">
         <span class="rp-ic">${icons.lock}</span>
-        <span class="rp-name"><b>${p.name}</b><span class="rp-login">${p.domain ? p.domain + "\\" : ""}${p.username}</span></span>
+        <span class="rp-name"><b>${p.name}</b><span class="rp-login">${p.domain ? p.domain + "\\" : ""}${p.username}${p.saved ? ' · <span class="rp-saved">пароль сохранён</span>' : ' · <span class="rp-nosave">без пароля</span>'}</span></span>
         <div class="grow"></div>
         <button class="reg-x" data-del-profile="${enc(p.name)}" aria-label="Удалить учётку">${icons.close}</button>
       </div>`).join("")

@@ -102,22 +102,41 @@ class Api:
 
     # --- реестр серверов и кластеров ---
     def get_registry(self) -> dict:
-        return self._registry.as_dict()
+        return self._get_registry()
+
+    def _get_registry(self) -> dict:
+        """Реестр + признак сохранённого пароля (сами пароли не отдаём)."""
+        reg = self._registry.as_dict()
+        for p in reg.get("profiles", []):
+            p["saved"] = credentials.has_profile(p.get("name", ""))
+        for host, cfg in reg.get("serverConfig", {}).items():
+            auth = cfg.get("auth", {})
+            if auth.get("mode") == "explicit":
+                cfg["authSaved"] = credentials.has_profile("server:" + host)
+        return reg
 
     def add_cluster(self, name: str) -> dict:
-        self._registry.add_cluster(name); return self._registry.as_dict()
+        self._registry.add_cluster(name); return self._get_registry()
 
     def remove_cluster(self, name: str) -> dict:
-        self._registry.remove_cluster(name); return self._registry.as_dict()
+        self._registry.remove_cluster(name); return self._get_registry()
 
     def rename_cluster(self, old: str, new: str) -> dict:
-        self._registry.rename_cluster(old, new); return self._registry.as_dict()
+        self._registry.rename_cluster(old, new); return self._get_registry()
 
     def add_server(self, name: str, cluster: str = "") -> dict:
-        self._registry.add_server(name, cluster); return self._registry.as_dict()
+        self._registry.add_server(name, cluster); return self._get_registry()
 
     def remove_server(self, name: str, cluster: str = "") -> dict:
-        self._registry.remove_server(name, cluster); return self._registry.as_dict()
+        self._registry.remove_server(name, cluster)
+        # 9) убрать учётки удалённого сервера из Credential Manager
+        credentials.clear_server(name.split(":", 1)[0])
+        credentials.delete_profile("server:" + name)
+        credentials.delete_profile("zabbix:" + name)
+        return self._get_registry()
+
+    def move_server(self, host: str, cluster: str = "") -> dict:
+        self._registry.move_server(host, cluster); return self._get_registry()
 
     def export_cluster(self, name: str) -> dict | None:
         return self._registry.export_cluster(name)
@@ -196,36 +215,36 @@ class Api:
         self._registry.set_profile(name, domain, username, kind)
         if password:
             credentials.write_profile(name, username, password)
-        return self._registry.as_dict()
+        return self._get_registry()
 
     def remove_profile(self, name: str) -> dict:
         self._registry.remove_profile(name)
         credentials.delete_profile(name)
-        return self._registry.as_dict()
+        return self._get_registry()
 
     def set_server_auth(self, host: str, auth: dict, password: str = "") -> dict:
         self._registry.set_server_auth(host, auth)
         if auth.get("mode") == "explicit" and password:
             credentials.write_profile("server:" + host, auth.get("username", ""), password)
-        return self._registry.as_dict()
+        return self._get_registry()
 
     def set_cluster_profile(self, name: str, profile: str) -> dict:
         self._registry.set_cluster_defaults(name, profile=profile)
-        return self._registry.as_dict()
+        return self._get_registry()
 
     def set_server_display(self, host: str, display_name: str, show_ip: bool) -> dict:
         self._registry.set_server_display(host, display_name, show_ip)
-        return self._registry.as_dict()
+        return self._get_registry()
 
     def set_server_zabbix(self, host: str, url: str, token: str) -> dict:
         self._registry.set_server_zabbix(host, url, bool(url and token))
         if token:
             credentials.write_profile("zabbix:" + host, "", token)
-        return self._registry.as_dict()
+        return self._get_registry()
 
     def set_cluster_zabbix(self, name: str, url: str) -> dict:
         self._registry.set_cluster_defaults(name, zabbix_url=url)
-        return self._registry.as_dict()
+        return self._get_registry()
 
     def test_server(self, host: str) -> dict:
         """Применить креды и проверить доступность (quser). {ok, error}."""

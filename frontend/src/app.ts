@@ -65,7 +65,7 @@ const ACTIONS: Record<ActionKind, ActionDef> = {
 let mode: "manager" | "local" = "manager";
 let appRegistry: Registry = { clusters: [], servers: [], profiles: [], serverConfig: {} };
 let rows: Row[] = [];
-let unreachable: string[] = [];
+let unreachable: { server: string; error: string }[] = [];
 let searchQuery = "";
 let sortField: SortField = "server";
 let sortDir: SortDir = "asc";
@@ -254,7 +254,11 @@ function renderList(): void {
 
 function renderUnreachable(): void {
   const box = el<HTMLElement>("[data-unreach]");
-  box.textContent = unreachable.length ? `· не отвечают: ${unreachable.join(", ")}` : "";
+  if (!unreachable.length) { box.innerHTML = ""; return; }
+  box.innerHTML = "· не отвечают: " + unreachable.map((u) =>
+    `<span class="unreach-srv" data-err="${encodeURIComponent(u.error || "нет ответа")}" title="${(u.error || "нет ответа").replace(/"/g, "&quot;")}">${u.server}</span>`).join(", ");
+  box.querySelectorAll<HTMLElement>("[data-err]").forEach((e) =>
+    e.addEventListener("click", () => toast(decodeURIComponent(e.dataset.err!), "err")));
 }
 
 function renderMassbar(): void {
@@ -297,7 +301,7 @@ async function refresh(manual: boolean): Promise<void> {
   const loads: Record<string, ServerLoad> = {};
   for (const p of polls) {
     if (p.load) loads[p.server] = p.load;
-    if (!p.ok) { unreachable.push(p.server); continue; }
+    if (!p.ok) { unreachable.push({ server: p.server, error: p.error }); continue; }
     for (const s of p.sessions) rows.push({ ...s, server: p.server });
   }
   setLoads(loads);

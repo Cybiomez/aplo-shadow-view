@@ -96,7 +96,28 @@ class ServerRegistry:
             self._save()
 
     def remove_cluster(self, name: str) -> None:
-        self._data["clusters"] = [c for c in self._data["clusters"] if not _same(c["name"], name)]
+        c = self._cluster(name)
+        if c:  # серверы не теряем — переносим в «Без кластера»
+            for srv in c.get("servers", []):
+                if not any(_same(srv, x) for x in self._data["servers"]):
+                    self._data["servers"].append(srv)
+        self._data["clusters"] = [x for x in self._data["clusters"] if not _same(x["name"], name)]
+        self._save()
+
+    def move_server(self, host: str, cluster: str = "") -> None:
+        """Перенести сервер в кластер (пусто = «Без кластера»), без дублей."""
+        host = _norm(host)
+        self._data["servers"] = [s for s in self._data["servers"] if not _same(s, host)]
+        for c in self._data["clusters"]:
+            c["servers"] = [s for s in c["servers"] if not _same(s, host)]
+        if cluster:
+            tc = self._cluster(cluster)
+            if tc is None:
+                self.add_cluster(cluster); tc = self._cluster(cluster)
+            if tc is not None and not any(_same(host, x) for x in tc["servers"]):
+                tc["servers"].append(host)
+        elif not any(_same(host, x) for x in self._data["servers"]):
+            self._data["servers"].append(host)
         self._save()
 
     def rename_cluster(self, old: str, new: str) -> None:
@@ -131,6 +152,9 @@ class ServerRegistry:
                 c["servers"] = [s for s in c["servers"] if not _same(s, name)]
         else:
             self._data["servers"] = [s for s in self._data["servers"] if not _same(s, name)]
+        # 9) убрать конфигурацию удалённого сервера, чтобы не копилась
+        for key in [k for k in self._data.get("serverConfig", {}) if _same(k, name)]:
+            self._data["serverConfig"].pop(key, None)
         self._save()
 
     # ---------- профили учётных записей ----------

@@ -545,3 +545,16 @@ select.mini {
 .ss-toggle { display: flex; align-items: center; gap: 9px; font-size: 13px; color: var(--ink); margin-bottom: 14px; cursor: pointer;
   input { margin: 0; accent-color: var(--accent); } }
 .ss-auth { display: flex; flex-direction: column; gap: 9px; margin-bottom: 4px; }
+
+/* Инструменты кластера */
+.sb-cluster-tools { display: flex; gap: 6px; padding: 6px 14px 0; }
+.sb-cluster-tools .sb-mini.danger { color: var(--crit); &:hover { border-color: var(--crit); } }
+/* Форма кластера — выбор серверов */
+.cl-servers { display: flex; flex-direction: column; gap: 4px; max-height: 30vh; overflow-y: auto; }
+.cl-srv { display: flex; align-items: center; gap: 9px; font-size: 13px; color: var(--ink); padding: 5px 8px; border: 1px solid var(--border); border-radius: 8px; cursor: pointer;
+  input { margin: 0; accent-color: var(--accent); } }
+/* Признак пароля в профиле */
+.rp-saved { color: var(--good); }
+.rp-nosave { color: var(--warn); }
+/* Недоступный сервер — кликабельно для причины */
+.unreach-srv { text-decoration: underline dotted; cursor: help; }

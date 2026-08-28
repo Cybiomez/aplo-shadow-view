@@ -75,7 +75,7 @@ export interface UpdateNotice {
 export interface Cluster { name: string; servers: string[]; profile?: string; zabbix?: { url: string }; }
 
 /** Профиль учётной записи (пароль хранится в Credential Manager, не здесь). */
-export interface Profile { name: string; domain: string; username: string; kind: string; }
+export interface Profile { name: string; domain: string; username: string; kind: string; saved?: boolean; }
 
 /** Учётка сервера. */
 export interface ServerAuth {
@@ -86,7 +86,7 @@ export interface ServerAuth {
 }
 
 /** Конфигурация сервера в реестре. */
-export interface ServerCfg { auth?: ServerAuth; zabbix?: { url: string; configured: boolean }; displayName?: string; showIp?: boolean; }
+export interface ServerCfg { auth?: ServerAuth; zabbix?: { url: string; configured: boolean }; displayName?: string; showIp?: boolean; authSaved?: boolean; }
 
 /** Реестр серверов и кластеров. */
 export interface Registry {
