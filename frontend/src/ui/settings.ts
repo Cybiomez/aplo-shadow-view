@@ -7,8 +7,6 @@ import { toast } from "./toast";
 
 interface Hooks {
   onPolicyChange(state: PolicyState): void; // главный экран показывает плашку/отсчёт
-  onModeChange(mode: "manager" | "local"): void;
-  currentMode(): "manager" | "local";
 }
 
 let overlay: HTMLElement;
@@ -31,20 +29,6 @@ export async function initSettings(a: ShadowApi, h: Hooks): Promise<void> {
         <button class="icon-btn m-close" data-close aria-label="Закрыть">${icons.close}</button>
       </div>
       <div class="m-body">
-        <div class="sec">
-          <div class="sec-label">Режим работы</div>
-          <div class="set-row">
-            <div class="s-text">
-              <div class="s-title">Локальное управление</div>
-              <div class="s-sub">Сеансы этого сервера, где запущено приложение. Основной режим.</div>
-            </div>
-            <div class="seg" data-mode>
-              <button data-m="local">Локально</button>
-              <button data-m="manager">Менеджер</button>
-            </div>
-          </div>
-          <div class="set-row"><div class="s-sub" style="color:var(--warn)">⚠ «Менеджер серверов» — экспериментально и непроверено. Управление удалёнными серверами работает только ВНУТРИ их сети (нужны порты RPC/SMB), снаружи через проброшенный RDP-порт список сеансов недоступен.</div></div>
-        </div>
         <div class="sec">
           <div class="sec-label">Экстренный доступ</div>
           <div class="set-row">
@@ -109,13 +93,6 @@ export async function initSettings(a: ShadowApi, h: Hooks): Promise<void> {
   // начальные значения из настроек
   minutesSel().value = String(settings.policyMinutes);
   markChannel(settings.channel);
-  markMode(hooks.currentMode());
-  overlay.querySelectorAll<HTMLButtonElement>("[data-mode] button").forEach((b) =>
-    b.addEventListener("click", () => {
-      const m = b.dataset.m as "manager" | "local";
-      markMode(m);
-      hooks.onModeChange(m);
-    }));
   q<HTMLInputElement>("[data-res]").checked = settings.showResources;
   q<HTMLInputElement>("[data-zbx-url]").value = settings.zabbixUrl || "";
   q<HTMLElement>("[data-zbx-state]").textContent = settings.zabbixConfigured ? "настроен" : "";
@@ -189,11 +166,6 @@ function bindPolicy(): void {
     settings.policyMinutes = mins;
     api.setPolicyMinutes(mins);
   });
-}
-
-function markMode(m: string): void {
-  overlay.querySelectorAll<HTMLButtonElement>("[data-mode] button").forEach((b) =>
-    b.classList.toggle("on", b.dataset.m === m));
 }
 
 function markChannel(ch: string): void {
