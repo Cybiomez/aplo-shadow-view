@@ -25,7 +25,6 @@ export async function initRegistryModal(h: Hooks): Promise<void> {
         <button class="icon-btn m-close" data-close aria-label="Закрыть">${icons.close}</button>
       </div>
       <div class="m-body">
-        <div class="reg-note">Домен/логин/пароль для подключения к серверам. Пароли хранятся в Windows Credential Manager, в файле экспорта их нет. Домен — без слэша (напр. CORP); пусто = локальная.</div>
         <div class="reg-list" data-reglist></div>
         <div class="reg-foot"><button class="reg-act wide" data-add-profile>${icons.lock}<span>Добавить учётную запись</span></button></div>
       </div>
@@ -56,18 +55,19 @@ function renderList(): void {
     ? registry.profiles.map((p) => {
         const kind = p.domain ? "доменная" : "локальная";
         return `
-      <div class="reg-profile" data-edit="${enc(p.name)}" title="Изменить">
+      <div class="reg-profile">
         <span class="rp-ic">${icons.lock}</span>
         <span class="rp-name"><b>${p.name}</b><span class="rp-login">${kind} · ${p.domain ? p.domain + "\\" : ""}${p.username}${p.saved ? ' · <span class="rp-saved">пароль сохранён</span>' : ' · <span class="rp-nosave">без пароля</span>'}</span></span>
         <div class="grow"></div>
+        <button class="reg-edit" data-edit-btn="${enc(p.name)}">Изменить</button>
         <button class="reg-x" data-del-profile="${enc(p.name)}" aria-label="Удалить учётную запись">${icons.close}</button>
       </div>`; }).join("")
     : '<div class="reg-hint">Учёток пока нет. Добавьте доменную, локальную или сервисную — потом назначите серверам.</div>';
 
   box.querySelectorAll<HTMLElement>("[data-del-profile]").forEach((b) =>
     b.addEventListener("click", async (e) => { e.stopPropagation(); apply(await api.removeProfile(decodeURIComponent(b.dataset.delProfile!))); }));
-  box.querySelectorAll<HTMLElement>("[data-edit]").forEach((row) =>
-    row.addEventListener("click", () => editProfile(decodeURIComponent(row.dataset.edit!))));
+  box.querySelectorAll<HTMLElement>("[data-edit-btn]").forEach((b) =>
+    b.addEventListener("click", () => editProfile(decodeURIComponent(b.dataset.editBtn!))));
 }
 
 async function addProfile(): Promise<void> {
@@ -88,13 +88,13 @@ function credentialForm(title: string, existing: { name: string; domain: string;
   return new Promise((resolve) => {
     const ov = document.createElement("div");
     ov.className = "overlay overlay-top open";
-    const passPh = existing?.saved ? "•••• сохранён (пусто — не менять)" : "Пароль";
+    const passPh = existing?.saved ? "введите новый для изменения" : "Пароль";
     ov.innerHTML = `
       <div class="modal" role="dialog" aria-modal="true">
         <div class="m-head"><div class="m-ic accent" aria-hidden="true">${icons.lock}</div><h2>${title}</h2></div>
         <div class="m-body cred-form">
-          <input class="txt" data-name placeholder="Название (напр. Домен-администратор)" value="${existing ? existing.name.replace(/"/g, "&quot;") : ""}" ${existing ? "readonly" : ""} autocomplete="off" />
-          <input class="txt" data-domain placeholder="Домен без слэша (пусто = локальная)" value="${existing ? existing.domain.replace(/"/g, "&quot;") : ""}" autocomplete="off" />
+          <input class="txt" data-name placeholder="Название (Домен-администратор)" value="${existing ? existing.name.replace(/"/g, "&quot;") : ""}" ${existing ? "readonly" : ""} autocomplete="off" />
+          <input class="txt" data-domain placeholder="Домен без слэша (оставить пустым для локальной)" value="${existing ? existing.domain.replace(/"/g, "&quot;") : ""}" autocomplete="off" />
           <input class="txt" data-user placeholder="Логин" value="${existing ? existing.username.replace(/"/g, "&quot;") : ""}" autocomplete="off" />
           <input class="txt" type="password" data-pass placeholder="${passPh}" autocomplete="off" />
         </div>

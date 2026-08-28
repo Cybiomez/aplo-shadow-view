@@ -34,10 +34,10 @@ export function openServerForm(registry: Registry, host: string | null): Promise
           <button class="icon-btn m-close" data-close aria-label="Закрыть">${icons.close}</button></div>
         <div class="m-body">
           <div class="ss-field"><label>Адрес (сетевое имя или IP)</label>
-            ${editing ? `<div class="ss-static mono">${host}</div>` : '<input class="txt" data-addr placeholder="напр. SERVER-01 или 10.0.0.5" autocomplete="off" />'}
+            ${editing ? `<div class="ss-static mono">${host}</div>` : '<input class="txt" data-addr placeholder="SERVER-01 или 10.0.0.5" autocomplete="off" />'}
           </div>
           <div class="ss-field"><label>Отображаемое имя (необязательно)</label>
-            <input class="txt" data-name placeholder="напр. Терминал-1С" value="${(cfg.displayName || "").replace(/"/g, "&quot;")}" autocomplete="off" /></div>
+            <input class="txt" data-name placeholder="Терминал-1С" value="${(cfg.displayName || "").replace(/"/g, "&quot;")}" autocomplete="off" /></div>
           <label class="ss-toggle"><input type="checkbox" data-showip ${cfg.showIp ? "checked" : ""} /><span>Показывать IP после имени</span></label>
 
           <div class="ss-field"><label>Учётная запись</label>
@@ -52,9 +52,9 @@ export function openServerForm(registry: Registry, host: string | null): Promise
             </select>
           </div>
           <div class="ss-auth" data-explicit-block ${auth.mode !== "explicit" ? 'style="display:none"' : ""}>
-            <input class="txt" data-domain placeholder="Домен без слэша (пусто = локальная)" value="${auth.mode === "explicit" ? (auth.domain || "") : ""}" autocomplete="off" />
+            <input class="txt" data-domain placeholder="Домен без слэша (оставить пустым для локальной)" value="${auth.mode === "explicit" ? (auth.domain || "") : ""}" autocomplete="off" />
             <input class="txt" data-user placeholder="Логин" value="${auth.mode === "explicit" ? (auth.username || "") : ""}" autocomplete="off" />
-            <input class="txt" type="password" data-pass placeholder="${passSaved ? "•••• сохранён (пусто — не менять)" : "Пароль"}" autocomplete="off" />
+            <input class="txt" type="password" data-pass placeholder="${passSaved ? "введите новый для изменения" : "Пароль"}" autocomplete="off" />
           </div>
         </div>
         <div class="m-foot">

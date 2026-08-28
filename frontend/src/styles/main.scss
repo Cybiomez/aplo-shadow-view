@@ -582,3 +582,14 @@ select.txt option, select.mini option, .auth-sel option { background: var(--surf
 
 /* Опасная кнопка в модалке (удалить) */
 .mbtn.danger { color: var(--crit); border-color: var(--crit); &:hover { background: var(--crit-weak); } }
+
+/* Карточка учётной записи — видимая рамка */
+.reg-profile {
+  border: 1px solid var(--border-strong); border-radius: 10px; padding: 9px 11px; margin-bottom: 8px;
+  background: var(--surface);
+}
+.reg-edit {
+  font: inherit; font-size: 12px; font-weight: 600; color: var(--accent);
+  background: var(--surface); border: 1px solid var(--border-strong); padding: 5px 12px; border-radius: 7px; cursor: pointer;
+  &:hover { background: var(--accent-weak); border-color: var(--accent); }
+}
