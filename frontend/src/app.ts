@@ -129,7 +129,7 @@ function template(): string {
   <div class="app">
     <div class="titlebar">
       <div class="mark" aria-hidden="true">${icons.logo}</div>
-      <div class="title"><h1>AploShadowView</h1><p>Теневой доступ к сеансам RDS</p></div>
+      <div class="title"><h1>AploShadowView <span class="app-ver" data-ver></span></h1><p>Теневой доступ к сеансам RDS</p></div>
       <div class="grow"></div>
       <div class="mode-seg" data-mode role="group" aria-label="Режим">
         <button data-m="manager" title="Управление удалёнными серверами">Менеджер</button>
@@ -481,6 +481,7 @@ function applyMode(): void {
 export async function bootstrap(): Promise<void> {
   document.getElementById("app")!.innerHTML = template();
   initModal();
+  api.getVersion().then((v) => { const el = document.querySelector("[data-ver]"); if (el) el.textContent = "v" + v; });
 
   await initSettings(api, { onPolicyChange: paintPolicy });
 

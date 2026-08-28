@@ -180,8 +180,8 @@ def _swap_windows(new_file: str, target: str) -> None:
         f'  echo [%date% %time%] MOVE FAILED >> "{log}"\r\n'
         "  goto done\r\n"
         ")\r\n"
-        f'echo [%date% %time%] moved OK, restarting >> "{log}"\r\n'
-        f'start "" "{target}"\r\n'
+        f'echo [%date% %time%] moved OK, restarting via explorer >> "{log}"\r\n'
+        f'explorer.exe "{target}"\r\n'
         ":done\r\n"
         'del "%~f0"\r\n'
     )
