@@ -9,8 +9,10 @@ import { initServerBar, selectedServers, setRegistry } from "./ui/serverBar";
 import { serverLabel } from "./ui/serverSettings";
 import { initSettings, isSettingsOpen, openSettings, syncPolicy } from "./ui/settings";
 import { toast } from "./ui/toast";
+import { checkUpdateBubble } from "./ui/updateBubble";
 
 const POLL_MS = 10_000; // опрос серверов раз в 10 сек
+const UPDATE_CHECK_MS = 6 * 60 * 60 * 1000;
 
 type SortField = "name" | "status" | "idle" | "server";
 type SortDir = "asc" | "desc";
@@ -69,7 +71,7 @@ let sortField: SortField = "server";
 let sortDir: SortDir = "asc";
 const selectedRows = new Set<string>(); // ключ "server|sid"
 let lastRefresh = Date.now();
-let polling = false;
+let inflight = 0;
 let polledServers = new Set<string>();
 let policyTicker: number | null = null;
 
@@ -214,12 +216,12 @@ function renderList(): void {
 
   if (items.length === 0) {
     let msg: string;
-    if (mode === "local") msg = polling ? "Опрашиваю этот сервер…" : "На этом сервере нет пользователей";
+    if (searchQuery.trim()) msg = "Нет сеансов по запросу";
+    else if (mode === "local") msg = "На этом сервере нет пользователей";
     else if (selectedServers().length === 0) msg = "Выберите серверы для просмотра на панели выше";
-    else if (searchQuery.trim()) msg = "Нет сеансов по запросу";
-    else if (polling) msg = "Опрашиваю выбранные серверы…";
+    else if (!selectedServers().every((sv) => polledServers.has(sv))) msg = ""; // ещё опрашиваем — без заглушки
     else msg = "На выбранных серверах нет пользователей";
-    list.innerHTML = `<div class="empty">${msg}</div>`;
+    list.innerHTML = msg ? `<div class="empty">${msg}</div>` : "";
   } else {
     list.innerHTML = items.map((r) => {
       const key = rowKey(r);
@@ -289,8 +291,15 @@ function cleanupSelection(): void {
 /** Асинхронный опрос: каждый сервер сам по себе; пришли данные — заменяем ЕГО
  * строки и перерисовываем. Список не сбрасывается, дублей нет (строки сервера
  * заменяются целиком). */
+function setBusy(): void {
+  const b = el<HTMLElement>("[data-refresh]");
+  if (b) b.classList.toggle("busy", inflight > 0);
+}
+
 function pollTick(servers: string[]): void {
   for (const srv of servers) {
+    inflight++;
+    setBusy();
     api.pollServers([srv]).then((polls) => {
       const p = polls[0];
       if (!p) return;
@@ -303,16 +312,14 @@ function pollTick(servers: string[]): void {
       renderList();
       lastRefresh = Date.now();
       el<HTMLElement>("[data-refresh-info]").textContent = "обновлено только что";
-    }).catch(() => { /* сервер не ответил — молча, останется без строк */ });
+    }).catch(() => { /* сервер не ответил — молча */ }).finally(() => { inflight--; setBusy(); });
   }
 }
 
 async function refresh(manual: boolean): Promise<void> {
   if (mode === "local") {
-    polling = true;
-    if (rows.length === 0) renderList();
-    const sessions = await api.listSessions("");
-    polling = false;
+    inflight++; setBusy();
+    const sessions = await api.listSessions("").finally(() => { inflight--; setBusy(); });
     rows = sessions.map((s) => ({ ...s, server: "" }));
     unreachable = [];
     cleanupSelection();
@@ -534,10 +541,10 @@ export async function bootstrap(): Promise<void> {
   applyMode();
   paintPolicy(await api.getPolicy());
 
-  // уведомление об обновлении — только точка на кнопке настроек (без баббла)
-  api.checkUpdate().then((info) => {
-    if (info.available) el<HTMLElement>("[data-settings]").classList.add("has-update");
-  }).catch(() => {});
+  // уведомление об обновлении — баббл (проверка при старте и раз в 6 часов)
+  const hook = { onOpenSettings: openSettings };
+  checkUpdateBubble(hook);
+  setInterval(() => checkUpdateBubble(hook), UPDATE_CHECK_MS);
 
   setInterval(() => {
     const sec = Math.round((Date.now() - lastRefresh) / 1000);
