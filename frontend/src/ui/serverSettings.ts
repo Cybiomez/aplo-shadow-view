@@ -2,6 +2,7 @@
 import { api } from "../bridge";
 import type { Registry, ServerAuth } from "../types";
 import { icons } from "./icons";
+import { openModal } from "./modal";
 import { toast } from "./toast";
 
 const enc = encodeURIComponent;
@@ -32,8 +33,8 @@ export function openServerForm(registry: Registry, host: string | null): Promise
           <h2>${editing ? "Настройки сервера" : "Новый сервер"}</h2>
           <button class="icon-btn m-close" data-close aria-label="Закрыть">${icons.close}</button></div>
         <div class="m-body">
-          <div class="ss-field"><label>Адрес (имя или IP, можно IP:порт)</label>
-            ${editing ? `<div class="ss-static mono">${host}</div>` : '<input class="txt" data-addr placeholder="напр. 10.0.0.5 или 10.0.0.5:40114" autocomplete="off" />'}
+          <div class="ss-field"><label>Адрес (сетевое имя или IP)</label>
+            ${editing ? `<div class="ss-static mono">${host}</div>` : '<input class="txt" data-addr placeholder="напр. SERVER-01 или 10.0.0.5" autocomplete="off" />'}
           </div>
           <div class="ss-field"><label>Отображаемое имя (необязательно)</label>
             <input class="txt" data-name placeholder="напр. Терминал-1С" value="${(cfg.displayName || "").replace(/"/g, "&quot;")}" autocomplete="off" /></div>
@@ -41,12 +42,12 @@ export function openServerForm(registry: Registry, host: string | null): Promise
 
           <div class="ss-field"><label>Учётная запись</label>
             <select class="txt" data-authmode>
-              <option value="profile"${auth.mode !== "explicit" ? " selected" : ""}>Профиль учётки / локально</option>
+              <option value="profile"${auth.mode !== "explicit" ? " selected" : ""}>Профиль учётной записи / локально</option>
               <option value="explicit"${auth.mode === "explicit" ? " selected" : ""}>Свои учётные данные</option>
             </select></div>
           <div class="ss-auth" data-profile-block ${auth.mode === "explicit" ? 'style="display:none"' : ""}>
             <select class="txt" data-profile>
-              <option value="">— локально (текущая учётка) —</option>
+              <option value="">— локально (текущая учётная запись) —</option>
               ${profileOpts}
             </select>
           </div>
@@ -58,7 +59,7 @@ export function openServerForm(registry: Registry, host: string | null): Promise
         </div>
         <div class="m-foot">
           ${editing
-            ? '<button class="mbtn" data-export title="Экспортировать этот сервер в файл">Экспорт</button>'
+            ? '<button class="mbtn" data-export title="Экспортировать этот сервер в файл">Экспорт</button><button class="mbtn danger" data-delete>Удалить сервер</button>'
             : '<button class="mbtn" data-import title="Импортировать сервер из файла">Импорт из файла</button>'}
           <div class="grow"></div>
           <button class="mbtn" data-cancel>Отмена</button>
@@ -101,6 +102,15 @@ export function openServerForm(registry: Registry, host: string | null): Promise
       done(reg);
     });
 
+    ov.querySelector("[data-delete]")?.addEventListener("click", () => {
+      openModal({
+        title: "Удалить сервер", icon: "crit", glyph: icons.close,
+        body: `Убрать сервер <b>${host}</b> из списка? Его настройки и учётные данные будут удалены.`,
+        note: { text: "Сеансы на сервере не затрагиваются — удаляется только запись в приложении." },
+        confirm: "Удалить", confirmKind: "crit",
+        onConfirm: async () => { const reg = await api.removeServer(host!, ""); toast(`Сервер ${host} удалён`); done(reg); },
+      });
+    });
     ov.querySelector("[data-export]")?.addEventListener("click", async () => {
       const res = await api.exportFile("server", host!);
       toast(res.message, res.ok ? "ok" : "err");
