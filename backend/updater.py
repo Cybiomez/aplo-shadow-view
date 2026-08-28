@@ -55,17 +55,40 @@ def _parse(tag: str):
     return (int(m.group(1)), int(m.group(2)), int(m.group(3)), m.group(4) or "") if m else None
 
 
+def _compare_pre(a: str, b: str) -> int:
+    """Сравнение pre-release-суффиксов по точкам: числа — ЧИСЛЕННО (dev.10 > dev.9),
+    иначе лексически. (Портировано из claude-pocket, где чинили ту же граблю.)"""
+    aa, bb = a.split("."), b.split(".")
+    for i in range(max(len(aa), len(bb))):
+        if i >= len(aa):
+            return -1
+        if i >= len(bb):
+            return 1
+        x, y = aa[i], bb[i]
+        if x.isdigit() and y.isdigit():
+            c = int(x) - int(y)
+        else:
+            c = (x > y) - (x < y)
+        if c:
+            return c
+    return 0
+
+
 def _is_newer(candidate: str, current: str) -> bool:
     c, cur = _parse(candidate), _parse(current)
     if not c or not cur:
         return False
     if c[:3] != cur[:3]:
         return c[:3] > cur[:3]
-    if c[3] == "" and cur[3] != "":
-        return True   # стабильная новее своей же пред-релизной
-    if c[3] != "" and cur[3] == "":
+    # базовые номера равны — сравниваем pre-release-часть
+    cp, curp = c[3], cur[3]
+    if cp == curp:
         return False
-    return c[3] > cur[3]
+    if cp == "":            # кандидат финальный, текущий pre-release
+        return True
+    if curp == "":          # кандидат pre-release, текущий финальный
+        return False
+    return _compare_pre(cp, curp) > 0
 
 
 def _fetch_releases() -> list[dict]:
