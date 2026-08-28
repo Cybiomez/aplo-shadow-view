@@ -56,7 +56,14 @@ export function openServerForm(registry: Registry, host: string | null): Promise
             <input class="txt" type="password" data-pass placeholder="${passSaved ? "•••• сохранён (пусто — не менять)" : "Пароль"}" autocomplete="off" />
           </div>
         </div>
-        <div class="m-foot"><button class="mbtn" data-cancel>Отмена</button><button class="mbtn primary" data-save>${editing ? "Сохранить" : "Добавить"}</button></div>
+        <div class="m-foot">
+          ${editing
+            ? '<button class="mbtn" data-export title="Экспортировать этот сервер в файл">Экспорт</button>'
+            : '<button class="mbtn" data-import title="Импортировать сервер из файла">Импорт из файла</button>'}
+          <div class="grow"></div>
+          <button class="mbtn" data-cancel>Отмена</button>
+          <button class="mbtn primary" data-save>${editing ? "Сохранить" : "Добавить"}</button>
+        </div>
       </div>`);
 
     const q = <T extends Element>(sel: string) => ov.querySelector(sel) as T;
@@ -92,6 +99,18 @@ export function openServerForm(registry: Registry, host: string | null): Promise
       }
       toast(editing ? "Сервер сохранён" : `Сервер ${addr} добавлен`);
       done(reg);
+    });
+
+    ov.querySelector("[data-export]")?.addEventListener("click", async () => {
+      const res = await api.exportFile("server", host!);
+      toast(res.message, res.ok ? "ok" : "err");
+    });
+    ov.querySelector("[data-import]")?.addEventListener("click", async () => {
+      const res = await api.importFile();
+      if (res === null) return;
+      if ("error" in res) { toast("Ошибка импорта: " + (res as { error: string }).error, "err"); return; }
+      toast(`Импортировано: серверов ${res.added.servers}`);
+      done(res.registry);  // закрыть форму, реестр обновлён
     });
 
     (ov.querySelector(editing ? "[data-name]" : "[data-addr]") as HTMLInputElement).focus();
