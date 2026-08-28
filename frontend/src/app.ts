@@ -72,6 +72,8 @@ let sortDir: SortDir = "asc";
 const selectedRows = new Set<string>(); // ключ "server|sid"
 let lastRefresh = Date.now();
 let polling = false;
+let polledServers = new Set<string>();
+const RESOURCE_MS = 3000;
 let policyTicker: number | null = null;
 
 function rowKey(r: { server: string; sid: number }): string {
@@ -98,6 +100,19 @@ function parseIdle(idle: string): number {
   m = s.match(/^(\d+)/);
   if (m) return +m[1];
   return Number.MAX_SAFE_INTEGER;
+}
+
+function fmtIdle(idle: string): string {
+  const s = idle.trim().toLowerCase();
+  if (s === "нет" || s === "none" || s === "." || s === "") return "нет";
+  if (s === "—" || s === "-") return "—";
+  const mins = parseIdle(idle);
+  if (mins === Number.MAX_SAFE_INTEGER) return idle;
+  if (mins < 60) return `${mins} мин`;
+  const h = Math.floor(mins / 60), m = mins % 60;
+  if (h < 24) return m ? `${h} ч ${m} мин` : `${h} ч`;
+  const d = Math.floor(h / 24), hr = h % 24;
+  return hr ? `${d} сут ${hr} ч` : `${d} сут`;
 }
 
 function cmp(a: Row, b: Row): number {
@@ -208,6 +223,7 @@ function resBadge(r: Row): string {
 
 function renderList(): void {
   const list = el<HTMLElement>("[data-list]");
+  const savedScroll = list.scrollTop;
   const items = visibleRows();
   const selecting = hasSelection();
 
@@ -235,7 +251,7 @@ function renderList(): void {
         <div class="avatar" aria-hidden="true">${initials(r.name)}</div>
         <div class="who">
           <div class="name">${r.name}${you}</div>
-          <div class="meta">${chip}<span class="sid mono">сеанс ${r.sid}</span><span>простой: ${r.idle}</span>${resBadge(r)}</div>
+          <div class="meta">${chip}<span class="sid mono">сеанс ${r.sid}</span><span>простой: ${fmtIdle(r.idle)}</span>${resBadge(r)}</div>
         </div>
         <div class="server-col mono" title="${r.server}">${r.server ? serverLabel(r.server, appRegistry) : "локально"}</div>
         <div class="actions">
@@ -248,6 +264,7 @@ function renderList(): void {
     }).join("");
   }
   el<HTMLElement>("[data-count]").textContent = String(rows.length);
+  list.scrollTop = savedScroll; // не терять позицию при частых обновлениях
   renderUnreachable();
   renderMassbar();
 }
@@ -265,6 +282,39 @@ function renderMassbar(): void {
   const bar = el<HTMLElement>("[data-massbar]");
   bar.classList.toggle("show", hasSelection());
   el<HTMLElement>("[data-mb-count]").textContent = String(selectedRows.size);
+}
+
+/** Изменился выбор серверов: снятые убираем МГНОВЕННО, добавленные опрашиваем за кадром. */
+function onSelectionChanged(servers: string[]): void {
+  const sel = new Set(servers);
+  // мгновенно: убрать строки/недоступные снятых серверов + перерисовать
+  rows = rows.filter((r) => sel.has(r.server));
+  unreachable = unreachable.filter((u) => sel.has(u.server));
+  const present = new Set(rows.map(rowKey));
+  for (const k of [...selectedRows]) if (!present.has(k)) selectedRows.delete(k);
+  polledServers = new Set([...polledServers].filter((x) => sel.has(x)));
+  renderList();
+  // за кадром: опросить только новые
+  const added = servers.filter((x) => !polledServers.has(x));
+  if (added.length) pollAppend(added);
+}
+
+async function pollAppend(servers: string[]): Promise<void> {
+  polling = true;
+  if (rows.length === 0) renderList();
+  const polls: ServerPoll[] = await api.pollServers(servers);
+  polling = false;
+  const loads: Record<string, ServerLoad> = {};
+  for (const p of polls) {
+    polledServers.add(p.server);
+    if (p.load) loads[p.server] = p.load;
+    if (!p.ok) { if (!unreachable.some((u) => u.server === p.server)) unreachable.push({ server: p.server, error: p.error }); continue; }
+    for (const sess of p.sessions) rows.push({ ...sess, server: p.server });
+  }
+  setLoads(loads);
+  renderList();
+  lastRefresh = Date.now();
+  el<HTMLElement>("[data-refresh-info]").textContent = "обновлено только что";
 }
 
 async function refresh(manual: boolean): Promise<void> {
@@ -286,36 +336,15 @@ async function refresh(manual: boolean): Promise<void> {
   }
   const servers = selectedServers();
   if (servers.length === 0) {
-    rows = []; unreachable = [];
+    rows = []; unreachable = []; polledServers.clear();
     renderList();
     el<HTMLElement>("[data-refresh-info]").textContent = "—";
     return;
   }
-  polling = true;
-  if (rows.length === 0) renderList();
-  const polls: ServerPoll[] = await api.pollServers(servers);
-  polling = false;
-
-  rows = [];
-  unreachable = [];
-  const loads: Record<string, ServerLoad> = {};
-  for (const p of polls) {
-    if (p.load) loads[p.server] = p.load;
-    if (!p.ok) { unreachable.push({ server: p.server, error: p.error }); continue; }
-    for (const s of p.sessions) rows.push({ ...s, server: p.server });
-  }
-  setLoads(loads);
-  // подчистить выделение от исчезнувших строк
-  const present = new Set(rows.map(rowKey));
-  for (const k of [...selectedRows]) if (!present.has(k)) selectedRows.delete(k);
-
-  renderList();
-  lastRefresh = Date.now();
-  el<HTMLElement>("[data-refresh-info]").textContent = "обновлено только что";
-  if (manual) {
-    const b = el<HTMLElement>("[data-refresh]");
-    b.classList.remove("spin"); void b.offsetWidth; b.classList.add("spin");
-  }
+  // полный переопрос всего выбранного (кнопка «Обновить» / авто раз в минуту)
+  rows = []; unreachable = []; polledServers.clear();
+  if (manual) { const b = el<HTMLElement>("[data-refresh]"); b.classList.remove("spin"); void b.offsetWidth; b.classList.add("spin"); }
+  await pollAppend(servers);
 }
 
 function fmtAgo(sec: number): string {
@@ -493,6 +522,26 @@ function applyMode(): void {
   refresh(false);
 }
 
+async function refreshResources(): Promise<void> {
+  if (mode !== "manager") return;
+  const servers = selectedServers().filter((x) => polledServers.has(x));
+  if (!servers.length) return;
+  let res;
+  try { res = await api.getResources(servers); } catch { return; }
+  const loads: Record<string, ServerLoad> = {};
+  for (const srv of Object.keys(res)) {
+    const data = res[srv];
+    if (data.load) loads[srv] = data.load;
+    for (const r of rows) {
+      if (r.server !== srv) continue;
+      const sr = data.sessions[String(r.sid)];
+      if (sr) { r.ram_mb = sr.ram_mb; r.cpu_pct = sr.cpu_pct; }
+    }
+  }
+  setLoads(loads);
+  renderList();
+}
+
 export async function bootstrap(): Promise<void> {
   document.getElementById("app")!.innerHTML = template();
   initModal();
@@ -504,7 +553,7 @@ export async function bootstrap(): Promise<void> {
   appRegistry = registry;
   await initRegistryModal({ onChange: (r) => setRegistry(r) });
   initServerBar(el<HTMLElement>("[data-serverbar]"), registry, {
-    onSelectionChange: () => refresh(false),
+    onSelectionChange: onSelectionChanged,
     onManageCredentials: openRegistry,
     onRegistryChange: (r) => { appRegistry = r; setModalRegistry(r); renderList(); },
   });
@@ -522,6 +571,9 @@ export async function bootstrap(): Promise<void> {
   const hook = { onOpenSettings: openSettings };
   checkUpdateBubble(hook);
   setInterval(() => checkUpdateBubble(hook), UPDATE_CHECK_MS);
+
+  // #1: ресурсы (ЦПУ/ОЗУ) обновляем часто, не трогая опрос сеансов
+  setInterval(refreshResources, RESOURCE_MS);
 
   setInterval(() => {
     const sec = Math.round((Date.now() - lastRefresh) / 1000);

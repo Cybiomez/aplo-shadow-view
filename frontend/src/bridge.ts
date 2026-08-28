@@ -16,6 +16,7 @@ import type {
   UpdateInfo,
   UpdateNotice,
   ServerPoll,
+  ServerLoad,
   Registry,
   ServerAuth,
   ImportResult,
@@ -27,6 +28,7 @@ export interface ShadowApi {
   getVersion(): Promise<string>;
   listSessions(server?: string): Promise<Session[]>;
   pollServers(servers: string[]): Promise<ServerPoll[]>;
+  getResources(servers: string[]): Promise<Record<string, { load?: ServerLoad; sessions: Record<string, { ram_mb?: number; cpu_pct?: number }> }>>;
   shadow(sid: number, mode: ShadowMode, server?: string): Promise<ActionResult>;
   disconnect(sid: number, server?: string): Promise<ActionResult>;
   logoff(sid: number, server?: string): Promise<ActionResult>;
@@ -83,6 +85,7 @@ class RealApi implements ShadowApi {
   getVersion() { return this.api.get_version(); }
   listSessions(server = "") { return this.api.list_sessions(server); }
   pollServers(servers: string[]) { return this.api.poll_servers(servers); }
+  getResources(servers: string[]) { return this.api.get_resources(servers); }
   shadow(sid: number, mode: ShadowMode, server = "") { return this.api.shadow(sid, mode, server); }
   disconnect(sid: number, server = "") { return this.api.disconnect(sid, server); }
   logoff(sid: number, server = "") { return this.api.logoff(sid, server); }
@@ -153,6 +156,15 @@ class MockApi implements ShadowApi {
   getServerName() { return this.wait("TERMINAL-01"); }
   getVersion() { return this.wait("0.1.0"); }
   listSessions(_server = "") { return this.wait(this.base.slice()); }
+  getResources(servers: string[]) {
+    const out: Record<string, { load?: ServerLoad; sessions: Record<string, { ram_mb?: number; cpu_pct?: number }> }> = {};
+    servers.forEach((srv, i) => {
+      const sess: Record<string, { ram_mb: number; cpu_pct: number }> = {};
+      this.base.slice(0, 3 + (i % 3)).forEach((s, j) => { sess[String(s.sid + i * 10)] = { ram_mb: 120 + j * 260 + i * 40, cpu_pct: (j * 7 + i * 3) % 60 }; });
+      out[srv] = { load: { cpu: (30 + i * 17) % 95, ram_pct: (45 + i * 13) % 95, source: "demo" }, sessions: sess };
+    });
+    return this.wait(out, 200);
+  }
   pollServers(servers: string[]) {
     // на каждый сервер — свой набор сеансов (сдвиг для наглядности); один «недоступен»
     const polls: ServerPoll[] = servers.map((srv, i) => {

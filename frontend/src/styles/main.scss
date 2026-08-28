@@ -194,6 +194,7 @@ body {
   width: 100%; max-width: 440px; background: var(--surface);
   border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow-modal); overflow: hidden;
   &.wide { max-width: 500px; }
+  max-height: 90vh; display: flex; flex-direction: column;
   .m-head { display: flex; align-items: center; gap: 12px; padding: 18px 20px 0; }
   .m-ic {
     width: 36px; height: 36px; flex: none; border-radius: 9px; display: grid; place-items: center;
@@ -205,7 +206,7 @@ body {
   h2 { margin: 0; font-size: 15px; font-weight: 700; }
   .m-close { margin-left: auto; }
   .m-body {
-    padding: 14px 20px 20px;
+    padding: 14px 20px 20px; overflow-y: auto; flex: 1; min-height: 0;
     p { margin: 0; font-size: 13.5px; color: var(--muted); line-height: 1.55; }
     .warnline {
       margin-top: 12px; padding: 10px 12px; background: var(--warn-weak); color: var(--warn);
