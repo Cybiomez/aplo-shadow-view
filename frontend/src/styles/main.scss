@@ -563,9 +563,7 @@ select.mini {
 /* Заголовок панели серверов (плоский список) */
 .sb-title { font-size: 12.5px; font-weight: 700; color: var(--muted); letter-spacing: .02em; }
 
-/* Точка «есть обновление» на кнопке настроек */
-.icon-btn.has-update { position: relative; }
-.icon-btn.has-update::after {
-  content: ""; position: absolute; top: 4px; right: 4px; width: 8px; height: 8px;
-  border-radius: 50%; background: var(--accent); border: 2px solid var(--surface);
-}
+
+/* Индикатор идущего опроса на кнопке «Обновить» */
+.btn-refresh.busy svg { animation: spin .8s linear infinite; }
+.btn-refresh.busy { color: var(--muted); }
