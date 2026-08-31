@@ -37,6 +37,7 @@ export interface Settings {
   mode: "manager" | "local";
   channel: Channel;
   policyMinutes: number;   // таймер авто-возврата экстренного режима
+  unrestrictedAccess: boolean; // /noConsentPrompt во всех подключениях
   showResources: boolean;  // показывать ЦПУ/ОЗУ
   zabbixUrl: string;
   zabbixConfigured: boolean;

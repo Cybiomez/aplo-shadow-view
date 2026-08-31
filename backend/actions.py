@@ -18,7 +18,7 @@ from __future__ import annotations
 import subprocess
 import sys
 
-from . import audit, policy
+from . import audit
 
 _NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
@@ -43,7 +43,7 @@ def _at(server: str) -> str:
     return f" на {server}" if server else ""
 
 
-def shadow(sid: int, mode: str, server: str = "") -> dict:
+def shadow(sid: int, mode: str, server: str = "", no_consent: bool = False) -> dict:
     """mode: 'view' | 'control'. Запускает mstsc, не дожидаясь закрытия окна."""
     who = _name_for(sid, server)
     if sys.platform != "win32":
@@ -56,7 +56,7 @@ def shadow(sid: int, mode: str, server: str = "") -> dict:
     args.append(f"/shadow:{sid}")
     if mode == "control":
         args.append("/control")
-    if policy.is_emergency_active(server):
+    if no_consent:
         args.append("/noConsentPrompt")
 
     try:
@@ -66,7 +66,7 @@ def shadow(sid: int, mode: str, server: str = "") -> dict:
         return _result(False, f"Не удалось запустить подключение: {e}")
 
     audit.log(f"shadow:{mode}", f"{who}{_at(server)}", sid, "ok")
-    hint = "" if policy.is_emergency_active(server) else " Пользователь увидит запрос на подтверждение."
+    hint = "" if no_consent else " Пользователь увидит запрос на подтверждение."
     verb = "просмотр" if mode == "view" else "управление"
     return _result(True, f"Подключение к {who}{_at(server)} ({verb}) запущено.{hint}")
 
