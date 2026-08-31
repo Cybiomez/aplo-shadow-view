@@ -9,7 +9,6 @@
 
 import type {
   ActionResult,
-  PolicyState,
   Session,
   Settings,
   ShadowMode,
@@ -41,6 +40,7 @@ export interface ShadowApi {
   addServer(name: string, cluster?: string): Promise<Registry>;
   removeServer(name: string, cluster?: string): Promise<Registry>;
   moveServer(host: string, cluster: string): Promise<Registry>;
+  reorderServers(order: string[]): Promise<Registry>;
   exportCluster(name: string): Promise<unknown>;
   exportServer(name: string): Promise<unknown>;
   exportRegistry(): Promise<unknown>;
@@ -65,9 +65,7 @@ export interface ShadowApi {
   setShowResources(on: boolean): Promise<void>;
   setZabbix(url: string, token: string): Promise<void>;
 
-  getPolicy(server?: string): Promise<PolicyState>;
-  enableEmergency(server?: string): Promise<PolicyState>;
-  disableEmergency(server?: string): Promise<PolicyState>;
+  setUnrestricted(on: boolean): Promise<boolean>;
 
   openLog(): Promise<void>;
   getUpdateNotification(): Promise<UpdateNotice>;
@@ -96,6 +94,7 @@ class RealApi implements ShadowApi {
   addServer(name: string, cluster = "") { return this.api.add_server(name, cluster); }
   removeServer(name: string, cluster = "") { return this.api.remove_server(name, cluster); }
   moveServer(host: string, cluster: string) { return this.api.move_server(host, cluster); }
+  reorderServers(order: string[]) { return this.api.reorder_servers(order); }
   exportCluster(name: string) { return this.api.export_cluster(name); }
   exportServer(name: string) { return this.api.export_server(name); }
   exportRegistry() { return this.api.export_registry(); }
@@ -116,9 +115,7 @@ class RealApi implements ShadowApi {
   setPolicyMinutes(minutes: number) { return this.api.set_policy_minutes(minutes); }
   setShowResources(on: boolean) { return this.api.set_show_resources(on); }
   setZabbix(url: string, token: string) { return this.api.set_zabbix(url, token); }
-  getPolicy(server = "") { return this.api.get_policy(server); }
-  enableEmergency(server = "") { return this.api.enable_emergency(server); }
-  disableEmergency(server = "") { return this.api.disable_emergency(server); }
+  setUnrestricted(on: boolean) { return this.api.set_unrestricted(on); }
   openLog() { return this.api.open_log(); }
   getUpdateNotification() { return this.api.get_update_notification(); }
   dismissUpdate(version: string) { return this.api.dismiss_update(version); }
@@ -145,9 +142,7 @@ class MockApi implements ShadowApi {
     { name: "a.kozlov", sid: 2, state: "disc", idle: "—", you: false },
     { name: "d.morozov", sid: 6, state: "disc", idle: "5 сут", you: false },
   ];
-  private settings: Settings = { mode: "manager", channel: "latest", policyMinutes: 15, showResources: true, zabbixUrl: "", zabbixConfigured: false };
-  private policy: PolicyState = { active: false, remaining: 0, minutes: 15 };
-  private timer: number | null = null;
+  private settings: Settings = { mode: "manager", channel: "latest", policyMinutes: 15, unrestrictedAccess: false, showResources: true, zabbixUrl: "", zabbixConfigured: false };
 
   private wait<T>(value: T, ms = 250): Promise<T> {
     return new Promise((res) => setTimeout(() => res(value), ms));
@@ -196,6 +191,7 @@ class MockApi implements ShadowApi {
   renameCluster(o: string, n: string) { const c = this.registry.clusters.find((x) => x.name === o); if (c && n) c.name = n; return this.wait(structuredClone(this.registry)); }
   addServer(name: string, cluster = "") { if (!name) return this.wait(structuredClone(this.registry)); if (cluster) { const c = this.registry.clusters.find((x) => x.name === cluster); if (c && !c.servers.includes(name)) c.servers.push(name); } else if (!this.registry.servers.includes(name)) this.registry.servers.push(name); return this.wait(structuredClone(this.registry)); }
   removeServer(name: string, cluster = "") { if (cluster) { const c = this.registry.clusters.find((x) => x.name === cluster); if (c) c.servers = c.servers.filter((s) => s !== name); } else this.registry.servers = this.registry.servers.filter((s) => s !== name); delete this.registry.serverConfig[name]; return this.wait(structuredClone(this.registry)); }
+  reorderServers(order: string[]) { const set = new Set(order); this.registry.servers = [...order.filter((x) => this.registry.servers.includes(x)), ...this.registry.servers.filter((x) => !set.has(x))]; return this.wait(structuredClone(this.registry)); }
   moveServer(host: string, cluster: string) { this.registry.servers = this.registry.servers.filter((s) => s !== host); this.registry.clusters.forEach((c) => c.servers = c.servers.filter((s) => s !== host)); if (cluster) { const c = this.registry.clusters.find((x) => x.name === cluster); if (c && !c.servers.includes(host)) c.servers.push(host); } else if (!this.registry.servers.includes(host)) this.registry.servers.push(host); return this.wait(structuredClone(this.registry)); }
   exportCluster(name: string) { const c = this.registry.clusters.find((x) => x.name === name); return this.wait(c ? { type: "aploshadowview/cluster", version: 1, cluster: c } : null); }
   exportServer(name: string) { return this.wait({ type: "aploshadowview/server", version: 1, server: name }); }
@@ -220,25 +216,11 @@ class MockApi implements ShadowApi {
   getSettings() { return this.wait(this.settings); }
   setMode(mode: string) { this.settings.mode = mode as Settings["mode"]; return this.wait(undefined); }
   setChannel(channel: string) { this.settings.channel = channel as Settings["channel"]; return this.wait(undefined); }
-  setPolicyMinutes(minutes: number) { this.settings.policyMinutes = minutes; this.policy.minutes = minutes; return this.wait(undefined); }
+  setPolicyMinutes(minutes: number) { this.settings.policyMinutes = minutes; return this.wait(undefined); }
   setShowResources(on: boolean) { this.settings.showResources = on; return this.wait(undefined); }
   setZabbix(url: string, _token: string) { this.settings.zabbixUrl = url; this.settings.zabbixConfigured = !!url; return this.wait(undefined); }
 
-  getPolicy(_server = "") { return this.wait(this.policy); }
-  enableEmergency(_server = "") {
-    this.policy = { active: true, remaining: this.settings.policyMinutes * 60, minutes: this.settings.policyMinutes };
-    if (this.timer) clearInterval(this.timer);
-    this.timer = window.setInterval(() => {
-      this.policy.remaining -= 1;
-      if (this.policy.remaining <= 0) { this.policy.active = false; this.policy.remaining = 0; if (this.timer) clearInterval(this.timer); }
-    }, 1000);
-    return this.wait(this.policy, 150);
-  }
-  disableEmergency(_server = "") {
-    this.policy = { active: false, remaining: 0, minutes: this.settings.policyMinutes };
-    if (this.timer) clearInterval(this.timer);
-    return this.wait(this.policy, 150);
-  }
+  setUnrestricted(on: boolean) { this.settings.unrestrictedAccess = on; return this.wait(on); }
 
   openLog() { console.log("(демо) открыть журнал"); return this.wait(undefined); }
   getUpdateNotification() { return this.wait<UpdateNotice>({ show: true, version: "0.2.0-dev.9", current: "0.1.0", channel: "dev" }); }

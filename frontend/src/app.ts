@@ -1,13 +1,13 @@
 // Главный экран (v2, мультисервер): панель серверов, список сеансов с колонкой
 // «Сервер», массовые операции, поиск, сортировка. Опрашивается только выбранное.
 import { api } from "./bridge";
-import type { ActionKind, PolicyState, Registry, Session } from "./types";
+import type { ActionKind, Registry, Session } from "./types";
 import { icons } from "./ui/icons";
 import { initModal, isModalOpen, openModal } from "./ui/modal";
 import { initRegistryModal, openRegistry, setModalRegistry } from "./ui/registryModal";
 import { initServerBar, selectedServers, setRegistry } from "./ui/serverBar";
 import { serverLabel } from "./ui/serverSettings";
-import { initSettings, isSettingsOpen, openSettings, syncPolicy } from "./ui/settings";
+import { initSettings, isSettingsOpen, openSettings, syncUnrestricted, triggerUpdateCheck } from "./ui/settings";
 import { toast } from "./ui/toast";
 import { checkUpdateBubble } from "./ui/updateBubble";
 
@@ -73,7 +73,7 @@ const selectedRows = new Set<string>(); // ключ "server|sid"
 let lastRefresh = Date.now();
 let inflight = 0;
 let polledServers = new Set<string>();
-let policyTicker: number | null = null;
+let emgHidden = false;
 
 function rowKey(r: { server: string; sid: number }): string {
   return `${r.server}|${r.sid}`;
@@ -156,9 +156,10 @@ function template(): string {
 
     <div class="emg" data-emg>
       <div class="e-ic" aria-hidden="true">${icons.lock}</div>
-      <div class="e-text">Экстренный режим (локально): подключение <b>без подтверждения</b>. Вернётся автоматически.</div>
-      <span class="cd mono" data-emg-cd aria-live="polite">0:00</span>
+      <div class="e-text"><b>Режим неограниченного доступа</b>: подключение к сеансам без подтверждения пользователя.</div>
+      <div class="grow"></div>
       <button class="e-off" data-emg-off>Выключить</button>
+      <button class="e-hide" data-emg-hide title="Скрыть строку (режим остаётся включённым)">Скрыть</button>
     </div>
 
     <div class="serverbar" data-serverbar></div>
@@ -345,29 +346,13 @@ function fmtAgo(sec: number): string {
   if (sec < 60) return `обновлено ${sec} с назад`;
   return `обновлено ${Math.floor(sec / 60)} мин назад`;
 }
-function fmtClock(sec: number): string {
-  const m = Math.floor(sec / 60), s = sec % 60;
-  return `${m}:${s < 10 ? "0" : ""}${s}`;
-}
 
-function paintPolicy(state: PolicyState): void {
+function paintUnrestricted(on: boolean): void {
   const emg = el<HTMLElement>("[data-emg]");
-  const cd = el<HTMLElement>("[data-emg-cd]");
-  syncPolicy(state);
-  if (policyTicker) { clearInterval(policyTicker); policyTicker = null; }
-  if (!state.active) { emg.classList.remove("on"); return; }
+  syncUnrestricted(on);
+  if (!on) { emg.classList.remove("on"); emgHidden = false; return; }
+  if (emgHidden) { emg.classList.remove("on"); return; } // скрыто вручную, режим включён
   emg.classList.add("on");
-  let remaining = state.remaining;
-  cd.textContent = fmtClock(remaining);
-  policyTicker = window.setInterval(async () => {
-    remaining -= 1;
-    cd.textContent = fmtClock(Math.max(remaining, 0));
-    if (remaining <= 0) {
-      const fresh = await api.getPolicy();
-      paintPolicy(fresh);
-      if (!fresh.active) toast("Таймер истёк — вернулось к подтверждению пользователя");
-    }
-  }, 1000);
 }
 
 // --- Поиск + сортировка ---
@@ -458,9 +443,14 @@ function bindActions(): void {
   el<HTMLElement>("[data-log]").addEventListener("click", async () => { await api.openLog(); toast("Журнал открыт"); });
 
   el<HTMLElement>("[data-emg-off]").addEventListener("click", async () => {
-    const state = await api.disableEmergency();
-    paintPolicy(state);
-    toast("Режим без подтверждения выключен");
+    await api.setUnrestricted(false);
+    emgHidden = false;
+    paintUnrestricted(false);
+    toast("Режим неограниченного доступа выключен");
+  });
+  el<HTMLElement>("[data-emg-hide]").addEventListener("click", () => {
+    emgHidden = true;
+    el<HTMLElement>("[data-emg]").classList.remove("on");
   });
 
   // массовая панель
@@ -503,6 +493,8 @@ export function switchMode(m: "manager" | "local"): void {
   if (m === mode) return;
   mode = m;
   api.setMode(m);
+  rows = []; unreachable = []; polledServers.clear(); selectedRows.clear();
+  renderList(); // счётчик и список сразу сбрасываются под новый режим
   applyMode();
 }
 
@@ -522,7 +514,7 @@ export async function bootstrap(): Promise<void> {
   initModal();
   api.getVersion().then((v) => { const el = document.querySelector("[data-ver]"); if (el) el.textContent = "v" + v; });
 
-  await initSettings(api, { onPolicyChange: paintPolicy });
+  await initSettings(api, { onUnrestrictedChange: paintUnrestricted });
 
   const registry: Registry = await api.getRegistry();
   appRegistry = registry;
@@ -530,7 +522,15 @@ export async function bootstrap(): Promise<void> {
   initServerBar(el<HTMLElement>("[data-serverbar]"), registry, {
     onSelectionChange: onSelectionChanged,
     onManageCredentials: openRegistry,
-    onRegistryChange: (r) => { appRegistry = r; setModalRegistry(r); renderList(); },
+    onRegistryChange: (r) => {
+      appRegistry = r; setModalRegistry(r);
+      const exist = new Set([...r.servers, ...r.clusters.flatMap((c) => c.servers)]);
+      rows = rows.filter((row) => row.server === "" || exist.has(row.server));
+      unreachable = unreachable.filter((u) => exist.has(u.server));
+      polledServers = new Set([...polledServers].filter((sv) => exist.has(sv)));
+      cleanupSelection();
+      renderList();
+    },
   });
 
   bindActions();
@@ -541,10 +541,10 @@ export async function bootstrap(): Promise<void> {
   document.querySelectorAll<HTMLButtonElement>("[data-mode] button").forEach((b) =>
     b.addEventListener("click", () => switchMode(b.dataset.m as "manager" | "local")));
   applyMode();
-  paintPolicy(await api.getPolicy());
+  paintUnrestricted(settings.unrestrictedAccess);
 
   // уведомление об обновлении — баббл (проверка при старте и раз в 6 часов)
-  const hook = { onOpenSettings: openSettings };
+  const hook = { onUpdate: () => { openSettings(); setTimeout(triggerUpdateCheck, 100); } };
   checkUpdateBubble(hook);
   setInterval(() => checkUpdateBubble(hook), UPDATE_CHECK_MS);
 

@@ -21,6 +21,7 @@ DEFAULTS = {
     "mode": "local",           # local (этот сервер, основной) | manager (удалённый пульт, экспериментально)
     "channel": "latest",       # latest | dev
     "policyMinutes": 15,       # 5 | 15 | 30
+    "unrestrictedAccess": False,  # /noConsentPrompt во всех теневых подключениях
     "showResources": True,     # показывать ЦПУ/ОЗУ (тяжелее опрос)
     "zabbixUrl": "",           # http(s)://zabbix/  (пусто = не использовать)
     "zabbixToken": "",         # API-токен Zabbix
@@ -69,7 +70,7 @@ class Config:
 
     @policy_minutes.setter
     def policy_minutes(self, value: int) -> None:
-        if value in (5, 15, 30):
+        if value in (0, 5, 15, 30):
             self._data["policyMinutes"] = value
             self._save()
 
@@ -82,6 +83,15 @@ class Config:
         if value in ("manager", "local"):
             self._data["mode"] = value
             self._save()
+
+    @property
+    def unrestricted_access(self) -> bool:
+        return bool(self._data.get("unrestrictedAccess", False))
+
+    @unrestricted_access.setter
+    def unrestricted_access(self, value: bool) -> None:
+        self._data["unrestrictedAccess"] = bool(value)
+        self._save()
 
     @property
     def show_resources(self) -> bool:
@@ -134,6 +144,7 @@ class Config:
             "mode": self.mode,
             "channel": self.channel,
             "policyMinutes": self.policy_minutes,
+            "unrestrictedAccess": self.unrestricted_access,
             "showResources": self.show_resources,
             "zabbixUrl": url,
             "zabbixConfigured": bool(url and token),

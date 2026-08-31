@@ -19,7 +19,7 @@ let lastFocus: Element | null = null;
 
 export function initModal(): void {
   overlay = document.createElement("div");
-  overlay.className = "overlay overlay-top";
+  overlay.className = "overlay overlay-confirm";
   overlay.innerHTML = `
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="mTitle">
       <div class="m-head">
@@ -62,6 +62,7 @@ export function openModal(cfg: ModalConfig): void {
   elConfirm.textContent = cfg.confirm ?? "Подтвердить";
   elConfirm.className = "mbtn primary " + (cfg.confirmKind ?? "");
   lastFocus = document.activeElement;
+  document.body.appendChild(overlay); // поверх динамически созданных окон
   overlay.classList.add("open");
   elConfirm.focus();
 }

@@ -251,6 +251,16 @@ class ServerRegistry:
         p = self._profile(name)
         return (p.get("domain", ""), p.get("username", "")) if p else ("", "")
 
+    def reorder(self, order: list) -> None:
+        """Переставить серверы «Без кластера» в заданном порядке; неизвестные — в конец."""
+        cur = self._data["servers"]
+        new = [s for s in order if any(_same(s, x) for x in cur)]
+        for s in cur:
+            if not any(_same(s, x) for x in new):
+                new.append(s)
+        self._data["servers"] = new
+        self._save()
+
     # ---------- экспорт ----------
 
     def export_cluster(self, name: str) -> dict | None:

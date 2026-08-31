@@ -37,6 +37,7 @@ export interface Settings {
   mode: "manager" | "local";
   channel: Channel;
   policyMinutes: number;   // таймер авто-возврата экстренного режима
+  unrestrictedAccess: boolean; // /noConsentPrompt во всех подключениях
   showResources: boolean;  // показывать ЦПУ/ОЗУ
   zabbixUrl: string;
   zabbixConfigured: boolean;
@@ -45,8 +46,10 @@ export interface Settings {
 /** Состояние экстренной политики. */
 export interface PolicyState {
   active: boolean;
-  remaining: number; // секунд до авто-возврата (0, если выключено)
-  minutes: number;   // на сколько включали
+  remaining: number;   // секунд до авто-возврата (0, если выключено/постоянно)
+  minutes: number;     // на сколько включали
+  permanent?: boolean; // без авто-возврата
+  server?: string;
 }
 
 /** Итог проверки обновлений. */

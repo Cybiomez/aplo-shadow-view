@@ -1,12 +1,13 @@
-// Окно настроек: экстренный режим политики + обновление с GitHub.
+// Окно настроек: режим неограниченного доступа, список серверов, обновление.
 import type { ShadowApi } from "../bridge";
-import type { PolicyState, Settings } from "../types";
+import type { Settings } from "../types";
 import { icons } from "./icons";
 import { openModal } from "./modal";
+import { enhanceSelects } from "./select";
 import { toast } from "./toast";
 
 interface Hooks {
-  onPolicyChange(state: PolicyState): void; // главный экран показывает плашку/отсчёт
+  onUnrestrictedChange(on: boolean): void; // главный экран показывает плашку
 }
 
 let overlay: HTMLElement;
@@ -32,7 +33,7 @@ export async function initSettings(a: ShadowApi, h: Hooks): Promise<void> {
         <div class="sec">
           <div class="sec-label">Список серверов</div>
           <div class="set-row">
-            <div class="s-text"><div class="s-title">Экспорт и импорт</div><div class="s-sub">Без паролей.</div></div>
+            <div class="s-text"><div class="s-title">Экспорт и импорт</div><div class="s-sub">Экспорт и импорт списка серверов. Без паролей.</div></div>
           </div>
           <div class="set-row">
             <button class="btn-line" data-export-reg>${icons.upload}Экспорт</button>
@@ -40,24 +41,16 @@ export async function initSettings(a: ShadowApi, h: Hooks): Promise<void> {
           </div>
         </div>
         <div class="sec">
-          <div class="sec-label">Экстренный доступ</div>
+          <div class="sec-label">Режим неограниченного доступа</div>
           <div class="set-row">
             <div class="s-text">
               <div class="s-title">Подключение без подтверждения пользователя</div>
-              <div class="s-sub">Временно разрешает теневой вход, не спрашивая пользователя.</div>
+              <div class="s-sub">Добавляет /noConsentPrompt ко всем теневым подключениям. Работает, если на серверах политика теневого доступа выставлена в «полный контроль без разрешения» (через GPO).</div>
             </div>
-            <label class="switch" title="Экстренный режим">
-              <input type="checkbox" data-policy role="switch" aria-label="Режим без подтверждения пользователя">
+            <label class="switch" title="Режим неограниченного доступа">
+              <input type="checkbox" data-unrestricted role="switch" aria-label="Режим неограниченного доступа">
               <span class="track" aria-hidden="true"><span class="thumb"></span></span>
             </label>
-          </div>
-          <div class="set-row">
-            <div class="s-text"><div class="s-title">Автоматический возврат через</div></div>
-            <select class="mini" data-minutes aria-label="Таймер авто-возврата">
-              <option value="5">5 минут</option>
-              <option value="15">15 минут</option>
-              <option value="30">30 минут</option>
-            </select>
           </div>
         </div>
         <div class="sec">
@@ -82,8 +75,9 @@ export async function initSettings(a: ShadowApi, h: Hooks): Promise<void> {
   document.body.appendChild(overlay);
 
   // начальные значения из настроек
-  minutesSel().value = String(settings.policyMinutes);
   markChannel(settings.channel);
+  unrestrictedToggle().checked = settings.unrestrictedAccess;
+  enhanceSelects(overlay);
 
   overlay.querySelector("[data-close]")!.addEventListener("click", close);
   overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
@@ -101,54 +95,46 @@ export async function initSettings(a: ShadowApi, h: Hooks): Promise<void> {
     toast(`Импортировано: серверов ${res.added.servers}`);
   });
 
-  bindPolicy();
+  bindUnrestricted();
   bindUpdate();
 }
 
 const q = <T extends Element>(sel: string) => overlay.querySelector(sel) as T;
-const minutesSel = () => q<HTMLSelectElement>("[data-minutes]");
-const policyToggle = () => q<HTMLInputElement>("[data-policy]");
+const unrestrictedToggle = () => q<HTMLInputElement>("[data-unrestricted]");
 
 export function openSettings(): void { overlay.classList.add("open"); }
 export function close(): void { overlay.classList.remove("open"); }
 export function isSettingsOpen(): boolean { return overlay.classList.contains("open"); }
 
-/** Держит тумблер в модалке синхронным с реальным состоянием политики. */
-export function syncPolicy(state: PolicyState): void {
-  policyToggle().checked = state.active;
+/** Держит тумблер синхронным с состоянием режима. */
+export function syncUnrestricted(on: boolean): void {
+  unrestrictedToggle().checked = on;
 }
 
-function bindPolicy(): void {
-  policyToggle().addEventListener("change", () => {
-    const toggle = policyToggle();
+function bindUnrestricted(): void {
+  const toggle = unrestrictedToggle();
+  toggle.addEventListener("change", () => {
     if (toggle.checked) {
-      toggle.checked = false; // включаем только после подтверждения
-      const mins = parseInt(minutesSel().value, 10) || 15;
+      toggle.checked = false; // включаем после подтверждения
       openModal({
-        title: "Экстренный режим доступа",
+        title: "Режим неограниченного доступа",
         icon: "warn", glyph: icons.lock,
-        body: `Включить теневой доступ <b>без подтверждения пользователя</b> на ${mins} минут?`,
-        note: { kind: "crit", text: "Это временно ослабляет контур безопасности. Режим вернётся к «с подтверждением» автоматически по системному таймеру — даже если программа будет закрыта или зависнет." },
-        confirm: `Включить на ${mins} мин`, confirmKind: "warn",
+        body: "Включить подключение к сеансам <b>без подтверждения пользователя</b> для всех серверов?",
+        note: { kind: "crit", text: "Это ослабляет контур безопасности: администратор входит в чужой сеанс без согласия пользователя. Действует, пока не выключите." },
+        confirm: "Включить", confirmKind: "warn",
         onConfirm: async () => {
-          const state = await api.enableEmergency();
-          toggle.checked = state.active;
-          hooks.onPolicyChange(state);
-          toast(`Режим без подтверждения включён на ${state.minutes} мин`);
+          await api.setUnrestricted(true);
+          toggle.checked = true;
+          hooks.onUnrestrictedChange(true);
+          toast("Режим неограниченного доступа включён");
         },
       });
     } else {
-      api.disableEmergency().then((state) => {
-        hooks.onPolicyChange(state);
-        toast("Режим без подтверждения выключен");
+      api.setUnrestricted(false).then(() => {
+        hooks.onUnrestrictedChange(false);
+        toast("Режим неограниченного доступа выключен");
       });
     }
-  });
-
-  minutesSel().addEventListener("change", () => {
-    const mins = parseInt(minutesSel().value, 10) || 15;
-    settings.policyMinutes = mins;
-    api.setPolicyMinutes(mins);
   });
 }
 
@@ -215,3 +201,8 @@ function bindUpdate(): void {
   });
 }
 
+/** Открыть настройки уже с запущенной проверкой обновлений (из баббла). */
+export function triggerUpdateCheck(): void {
+  const btn = overlay?.querySelector<HTMLButtonElement>("[data-check]");
+  if (btn) btn.click();
+}
