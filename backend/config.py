@@ -69,7 +69,7 @@ class Config:
 
     @policy_minutes.setter
     def policy_minutes(self, value: int) -> None:
-        if value in (5, 15, 30):
+        if value in (0, 5, 15, 30):
             self._data["policyMinutes"] = value
             self._save()
 
