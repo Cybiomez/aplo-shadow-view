@@ -88,7 +88,7 @@ function credentialForm(title: string, existing: { name: string; domain: string;
   return new Promise((resolve) => {
     const ov = document.createElement("div");
     ov.className = "overlay overlay-top open";
-    const passPh = existing?.saved ? "введите новый для изменения" : "Пароль";
+    const passPh = existing?.saved ? "Пароль (введите новый для изменения)" : "Пароль";
     ov.innerHTML = `
       <div class="modal" role="dialog" aria-modal="true">
         <div class="m-head"><div class="m-ic accent" aria-hidden="true">${icons.lock}</div><h2>${title}</h2></div>
