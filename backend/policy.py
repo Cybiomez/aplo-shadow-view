@@ -49,9 +49,10 @@ def _read_state(server: str) -> dict:
 
 def _write_state(server: str, active: bool, minutes: int) -> None:
     data = _read_all()
+    permanent = active and minutes <= 0
     data[server or ""] = {
-        "active": active, "minutes": minutes,
-        "end_epoch": int(time.time()) + minutes * 60 if active else 0,
+        "active": active, "minutes": minutes, "permanent": permanent,
+        "end_epoch": int(time.time()) + minutes * 60 if (active and not permanent) else 0,
     }
     _STATE_FILE.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
 
@@ -155,14 +156,19 @@ def get_policy(server: str = "") -> dict:
     if active:
         end = int(state.get("end_epoch", 0))
         remaining = max(end - int(time.time()), 0) if end else minutes * 60
-    return {"active": active, "remaining": remaining, "minutes": minutes, "server": server}
+    permanent = bool(state.get("permanent")) and active
+    return {"active": active, "remaining": remaining, "minutes": minutes,
+            "permanent": permanent, "server": server}
 
 
 def enable_emergency(minutes: int, server: str = "") -> dict:
     _set_shadow(server, SHADOW_NO_CONSENT)
-    _schedule_revert(minutes, server)
+    if minutes and minutes > 0:
+        _schedule_revert(minutes, server)
+    else:
+        _cancel_revert(server)  # «Постоянно» — снять прежнее задание возврата
     _write_state(server, True, minutes)
-    audit.log("policy:emergency-on", server, "", f"{minutes}min")
+    audit.log("policy:emergency-on", server, "", f"{minutes}min" if minutes > 0 else "permanent")
     return get_policy(server)
 
 

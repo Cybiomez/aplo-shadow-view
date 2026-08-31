@@ -58,6 +58,7 @@ export async function initSettings(a: ShadowApi, h: Hooks): Promise<void> {
               <option value="5">5 минут</option>
               <option value="15">15 минут</option>
               <option value="30">30 минут</option>
+              <option value="0">Постоянно</option>
             </select>
           </div>
         </div>

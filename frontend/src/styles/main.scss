@@ -300,12 +300,7 @@ select.mini {
   transform: translateY(12px); opacity: 0; pointer-events: none;
   transition: transform .2s ease, opacity .2s ease;
   &.show { transform: translateY(0); opacity: 1; pointer-events: auto; }
-  .ub-body {
-    display: flex; align-items: flex-start; gap: 11px; width: 100%;
-    padding: 14px 14px 10px; border: none; background: transparent; cursor: pointer; text-align: left;
-    transition: background .15s;
-    &:hover { background: var(--accent-weak); }
-  }
+
   .ub-ic {
     width: 32px; height: 32px; flex: none; border-radius: 8px; display: grid; place-items: center;
     background: var(--accent-weak); color: var(--accent);
@@ -603,7 +598,7 @@ select.txt, select.mini, .auth-sel, .sort-toggles select {
 
 /* Кнопка «Обновить» в бабле */
 .ub-btn.solid { background: var(--accent); color: var(--accent-ink); border-color: transparent; &:hover { background: var(--accent-hover); } }
-.ub-body { display: flex; align-items: flex-start; gap: 11px; width: 100%; padding: 14px 14px 10px; text-align: left; }
+.ub-body { display: flex; align-items: flex-start; gap: 11px; width: 100%; padding: 14px 14px 10px; text-align: left; cursor: default; }
 
 /* Перетаскивание карточек серверов */
 .sb-card { cursor: default; }
@@ -623,13 +618,18 @@ select.txt, select.mini, .auth-sel, .sort-toggles select {
   span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 }
 .csel-menu {
-  display: none; position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 110;
-  background: var(--surface); border: 1px solid var(--border-strong); border-radius: 8px;
-  box-shadow: var(--shadow-modal); overflow: hidden; max-height: 220px; overflow-y: auto;
-  &.open { display: block; }
+  z-index: 120; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 8px;
+  box-shadow: var(--shadow-modal); overflow-y: auto; max-height: 220px;
 }
 .csel-opt {
   padding: 9px 12px; font-size: 13px; color: var(--ink); cursor: pointer;
   &:hover { background: var(--accent-weak); color: var(--accent); }
   &.on { background: var(--surface-2); font-weight: 600; }
+}
+
+/* Кнопка «Скрыть» в плашке экстренного режима */
+.e-hide {
+  font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+  color: var(--warn); background: transparent; border: none; padding: 5px 8px; text-decoration: underline;
+  &:hover { color: var(--ink); }
 }

@@ -74,6 +74,7 @@ let lastRefresh = Date.now();
 let inflight = 0;
 let polledServers = new Set<string>();
 let policyTicker: number | null = null;
+let emgHidden = false;
 
 function rowKey(r: { server: string; sid: number }): string {
   return `${r.server}|${r.sid}`;
@@ -156,9 +157,10 @@ function template(): string {
 
     <div class="emg" data-emg>
       <div class="e-ic" aria-hidden="true">${icons.lock}</div>
-      <div class="e-text">Экстренный режим (локально): подключение <b>без подтверждения</b>. Вернётся автоматически.</div>
+      <div class="e-text">Экстренный режим: подключение <b>без подтверждения пользователя</b>.</div>
       <span class="cd mono" data-emg-cd aria-live="polite">0:00</span>
       <button class="e-off" data-emg-off>Выключить</button>
+      <button class="e-hide" data-emg-hide title="Скрыть строку (режим остаётся активным)">Скрыть</button>
     </div>
 
     <div class="serverbar" data-serverbar></div>
@@ -355,8 +357,10 @@ function paintPolicy(state: PolicyState): void {
   const cd = el<HTMLElement>("[data-emg-cd]");
   syncPolicy(state);
   if (policyTicker) { clearInterval(policyTicker); policyTicker = null; }
-  if (!state.active) { emg.classList.remove("on"); return; }
+  if (!state.active) { emg.classList.remove("on"); emgHidden = false; return; }
+  if (emgHidden) { emg.classList.remove("on"); return; } // скрыто вручную, режим активен
   emg.classList.add("on");
+  if (state.permanent) { cd.textContent = "постоянно"; return; } // без авто-возврата
   let remaining = state.remaining;
   cd.textContent = fmtClock(remaining);
   policyTicker = window.setInterval(async () => {
@@ -459,8 +463,14 @@ function bindActions(): void {
 
   el<HTMLElement>("[data-emg-off]").addEventListener("click", async () => {
     const state = await api.disableEmergency();
+    emgHidden = false;
     paintPolicy(state);
     toast("Режим без подтверждения выключен");
+  });
+  el<HTMLElement>("[data-emg-hide]").addEventListener("click", () => {
+    emgHidden = true;
+    el<HTMLElement>("[data-emg]").classList.remove("on");
+    if (policyTicker) { clearInterval(policyTicker); policyTicker = null; }
   });
 
   // массовая панель
