@@ -3,6 +3,7 @@ import type { ShadowApi } from "../bridge";
 import type { PolicyState, Settings } from "../types";
 import { icons } from "./icons";
 import { openModal } from "./modal";
+import { enhanceSelects } from "./select";
 import { toast } from "./toast";
 
 interface Hooks {
@@ -80,6 +81,7 @@ export async function initSettings(a: ShadowApi, h: Hooks): Promise<void> {
       </div>
     </div>`;
   document.body.appendChild(overlay);
+  enhanceSelects(overlay);
 
   // начальные значения из настроек
   minutesSel().value = String(settings.policyMinutes);

@@ -3,6 +3,7 @@ import { api } from "../bridge";
 import type { Registry, ServerAuth } from "../types";
 import { icons } from "./icons";
 import { openModal } from "./modal";
+import { enhanceSelects } from "./select";
 import { toast } from "./toast";
 
 const enc = encodeURIComponent;
@@ -67,6 +68,7 @@ export function openServerForm(registry: Registry, host: string | null): Promise
         </div>
       </div>`);
 
+    enhanceSelects(ov);
     const q = <T extends Element>(sel: string) => ov.querySelector(sel) as T;
     const done = (r: Registry | null) => { ov.remove(); resolve(r); };
 
