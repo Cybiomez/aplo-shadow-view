@@ -12,7 +12,7 @@ from __future__ import annotations
 import socket
 import sys
 
-from . import actions, credentials, policy, resources, updater
+from . import actions, credentials, resources, updater
 from .servers import ServerRegistry
 from .config import Config
 from .sessions import list_sessions, probe
@@ -80,7 +80,7 @@ class Api:
             return list(ex.map(one, names))
 
     def shadow(self, sid: int, mode: str, server: str = "") -> dict:
-        return actions.shadow(int(sid), mode, server)
+        return actions.shadow(int(sid), mode, server, self._config.unrestricted_access)
 
     def disconnect(self, sid: int, server: str = "") -> dict:
         return actions.disconnect(int(sid), server)
@@ -263,15 +263,10 @@ class Api:
     def set_zabbix(self, url: str, token: str) -> None:
         self._config.set_zabbix(url, token)
 
-    # --- политика (экстренный режим) ---
-    def get_policy(self, server: str = "") -> dict:
-        return policy.get_policy(server)
-
-    def enable_emergency(self, minutes: int, server: str = "") -> dict:
-        return policy.enable_emergency(int(minutes), server)
-
-    def disable_emergency(self, server: str = "") -> dict:
-        return policy.disable_emergency(server)
+    # --- режим неограниченного доступа (глобальный флаг /noConsentPrompt) ---
+    def set_unrestricted(self, on: bool) -> bool:
+        self._config.unrestricted_access = bool(on)
+        return self._config.unrestricted_access
 
     # --- журнал ---
     def open_log(self) -> None:
