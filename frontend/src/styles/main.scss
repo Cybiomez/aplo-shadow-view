@@ -610,3 +610,26 @@ select.txt, select.mini, .auth-sel, .sort-toggles select {
 .sb-drag { color: var(--faint); cursor: grab; font-size: 12px; letter-spacing: -2px; user-select: none; }
 .sb-card.dragging { opacity: .5; }
 .sb-card.drop-target { border-color: var(--accent); border-style: dashed; }
+
+/* ===== Кастомный выпадающий список ===== */
+.csel { position: relative; }
+.csel > select { position: absolute; opacity: 0; pointer-events: none; width: 0; height: 0; }
+.csel-trigger {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%;
+  font: inherit; font-size: 13px; color: var(--ink); text-align: left; cursor: pointer;
+  background: var(--surface-2); border: 1px solid var(--border-strong); border-radius: 8px; padding: 8px 11px;
+  &:hover { border-color: var(--accent); }
+  svg { width: 14px; height: 14px; color: var(--faint); flex: none; }
+  span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
+.csel-menu {
+  display: none; position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 110;
+  background: var(--surface); border: 1px solid var(--border-strong); border-radius: 8px;
+  box-shadow: var(--shadow-modal); overflow: hidden; max-height: 220px; overflow-y: auto;
+  &.open { display: block; }
+}
+.csel-opt {
+  padding: 9px 12px; font-size: 13px; color: var(--ink); cursor: pointer;
+  &:hover { background: var(--accent-weak); color: var(--accent); }
+  &.on { background: var(--surface-2); font-weight: 600; }
+}
