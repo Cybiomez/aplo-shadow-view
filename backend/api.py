@@ -267,8 +267,8 @@ class Api:
     def get_policy(self, server: str = "") -> dict:
         return policy.get_policy(server)
 
-    def enable_emergency(self, server: str = "") -> dict:
-        return policy.enable_emergency(self._config.policy_minutes, server)
+    def enable_emergency(self, minutes: int, server: str = "") -> dict:
+        return policy.enable_emergency(int(minutes), server)
 
     def disable_emergency(self, server: str = "") -> dict:
         return policy.disable_emergency(server)

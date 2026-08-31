@@ -67,7 +67,7 @@ export interface ShadowApi {
   setZabbix(url: string, token: string): Promise<void>;
 
   getPolicy(server?: string): Promise<PolicyState>;
-  enableEmergency(server?: string): Promise<PolicyState>;
+  enableEmergency(minutes: number, server?: string): Promise<PolicyState>;
   disableEmergency(server?: string): Promise<PolicyState>;
 
   openLog(): Promise<void>;
@@ -119,7 +119,7 @@ class RealApi implements ShadowApi {
   setShowResources(on: boolean) { return this.api.set_show_resources(on); }
   setZabbix(url: string, token: string) { return this.api.set_zabbix(url, token); }
   getPolicy(server = "") { return this.api.get_policy(server); }
-  enableEmergency(server = "") { return this.api.enable_emergency(server); }
+  enableEmergency(minutes: number, server = "") { return this.api.enable_emergency(minutes, server); }
   disableEmergency(server = "") { return this.api.disable_emergency(server); }
   openLog() { return this.api.open_log(); }
   getUpdateNotification() { return this.api.get_update_notification(); }
@@ -228,8 +228,8 @@ class MockApi implements ShadowApi {
   setZabbix(url: string, _token: string) { this.settings.zabbixUrl = url; this.settings.zabbixConfigured = !!url; return this.wait(undefined); }
 
   getPolicy(_server = "") { return this.wait(this.policy); }
-  enableEmergency(_server = "") {
-    this.policy = { active: true, remaining: this.settings.policyMinutes * 60, minutes: this.settings.policyMinutes };
+  enableEmergency(minutes: number, _server = "") {
+    this.policy = { active: true, remaining: minutes > 0 ? minutes * 60 : 0, minutes, permanent: minutes <= 0 };
     if (this.timer) clearInterval(this.timer);
     this.timer = window.setInterval(() => {
       this.policy.remaining -= 1;

@@ -82,11 +82,11 @@ export async function initSettings(a: ShadowApi, h: Hooks): Promise<void> {
       </div>
     </div>`;
   document.body.appendChild(overlay);
-  enhanceSelects(overlay);
 
-  // начальные значения из настроек
+  // начальные значения из настроек (ДО enhanceSelects — чтобы триггер показал верно)
   minutesSel().value = String(settings.policyMinutes);
   markChannel(settings.channel);
+  enhanceSelects(overlay);
 
   overlay.querySelector("[data-close]")!.addEventListener("click", close);
   overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
@@ -126,18 +126,22 @@ function bindPolicy(): void {
     const toggle = policyToggle();
     if (toggle.checked) {
       toggle.checked = false; // включаем только после подтверждения
-      const mins = parseInt(minutesSel().value, 10) || 15;
+      const raw = parseInt(minutesSel().value, 10);
+      const mins = Number.isNaN(raw) ? 15 : raw;
+      const forHow = mins > 0 ? `на ${mins} минут` : "постоянно (до ручного выключения)";
       openModal({
         title: "Экстренный режим доступа",
         icon: "warn", glyph: icons.lock,
-        body: `Включить теневой доступ <b>без подтверждения пользователя</b> на ${mins} минут?`,
-        note: { kind: "crit", text: "Это временно ослабляет контур безопасности. Режим вернётся к «с подтверждением» автоматически по системному таймеру — даже если программа будет закрыта или зависнет." },
-        confirm: `Включить на ${mins} мин`, confirmKind: "warn",
+        body: `Включить теневой доступ <b>без подтверждения пользователя</b> ${forHow}?`,
+        note: { kind: "crit", text: mins > 0
+          ? "Это временно ослабляет контур безопасности. Режим вернётся к «с подтверждением» автоматически по системному таймеру — даже если программа будет закрыта или зависнет."
+          : "Это ослабляет контур безопасности до ручного выключения — авто-возврата не будет." },
+        confirm: mins > 0 ? `Включить на ${mins} мин` : "Включить постоянно", confirmKind: "warn",
         onConfirm: async () => {
-          const state = await api.enableEmergency();
+          const state = await api.enableEmergency(mins);
           toggle.checked = state.active;
           hooks.onPolicyChange(state);
-          toast(`Режим без подтверждения включён на ${state.minutes} мин`);
+          toast(state.permanent ? "Режим без подтверждения включён постоянно" : `Режим без подтверждения включён на ${state.minutes} мин`);
         },
       });
     } else {
@@ -149,7 +153,8 @@ function bindPolicy(): void {
   });
 
   minutesSel().addEventListener("change", () => {
-    const mins = parseInt(minutesSel().value, 10) || 15;
+    const raw = parseInt(minutesSel().value, 10);
+    const mins = Number.isNaN(raw) ? 15 : raw;
     settings.policyMinutes = mins;
     api.setPolicyMinutes(mins);
   });

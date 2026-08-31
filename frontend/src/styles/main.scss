@@ -630,6 +630,6 @@ select.txt, select.mini, .auth-sel, .sort-toggles select {
 /* Кнопка «Скрыть» в плашке экстренного режима */
 .e-hide {
   font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
-  color: var(--warn); background: transparent; border: none; padding: 5px 8px; text-decoration: underline;
-  &:hover { color: var(--ink); }
+  color: var(--warn); background: var(--surface); border: 1px solid var(--warn); padding: 5px 11px; border-radius: 7px;
+  &:hover { background: var(--warn); color: var(--surface); }
 }
