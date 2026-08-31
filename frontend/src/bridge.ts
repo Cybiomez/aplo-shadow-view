@@ -41,6 +41,7 @@ export interface ShadowApi {
   addServer(name: string, cluster?: string): Promise<Registry>;
   removeServer(name: string, cluster?: string): Promise<Registry>;
   moveServer(host: string, cluster: string): Promise<Registry>;
+  reorderServers(order: string[]): Promise<Registry>;
   exportCluster(name: string): Promise<unknown>;
   exportServer(name: string): Promise<unknown>;
   exportRegistry(): Promise<unknown>;
@@ -96,6 +97,7 @@ class RealApi implements ShadowApi {
   addServer(name: string, cluster = "") { return this.api.add_server(name, cluster); }
   removeServer(name: string, cluster = "") { return this.api.remove_server(name, cluster); }
   moveServer(host: string, cluster: string) { return this.api.move_server(host, cluster); }
+  reorderServers(order: string[]) { return this.api.reorder_servers(order); }
   exportCluster(name: string) { return this.api.export_cluster(name); }
   exportServer(name: string) { return this.api.export_server(name); }
   exportRegistry() { return this.api.export_registry(); }
@@ -196,6 +198,7 @@ class MockApi implements ShadowApi {
   renameCluster(o: string, n: string) { const c = this.registry.clusters.find((x) => x.name === o); if (c && n) c.name = n; return this.wait(structuredClone(this.registry)); }
   addServer(name: string, cluster = "") { if (!name) return this.wait(structuredClone(this.registry)); if (cluster) { const c = this.registry.clusters.find((x) => x.name === cluster); if (c && !c.servers.includes(name)) c.servers.push(name); } else if (!this.registry.servers.includes(name)) this.registry.servers.push(name); return this.wait(structuredClone(this.registry)); }
   removeServer(name: string, cluster = "") { if (cluster) { const c = this.registry.clusters.find((x) => x.name === cluster); if (c) c.servers = c.servers.filter((s) => s !== name); } else this.registry.servers = this.registry.servers.filter((s) => s !== name); delete this.registry.serverConfig[name]; return this.wait(structuredClone(this.registry)); }
+  reorderServers(order: string[]) { const set = new Set(order); this.registry.servers = [...order.filter((x) => this.registry.servers.includes(x)), ...this.registry.servers.filter((x) => !set.has(x))]; return this.wait(structuredClone(this.registry)); }
   moveServer(host: string, cluster: string) { this.registry.servers = this.registry.servers.filter((s) => s !== host); this.registry.clusters.forEach((c) => c.servers = c.servers.filter((s) => s !== host)); if (cluster) { const c = this.registry.clusters.find((x) => x.name === cluster); if (c && !c.servers.includes(host)) c.servers.push(host); } else if (!this.registry.servers.includes(host)) this.registry.servers.push(host); return this.wait(structuredClone(this.registry)); }
   exportCluster(name: string) { const c = this.registry.clusters.find((x) => x.name === name); return this.wait(c ? { type: "aploshadowview/cluster", version: 1, cluster: c } : null); }
   exportServer(name: string) { return this.wait({ type: "aploshadowview/server", version: 1, server: name }); }

@@ -7,7 +7,7 @@ import { initModal, isModalOpen, openModal } from "./ui/modal";
 import { initRegistryModal, openRegistry, setModalRegistry } from "./ui/registryModal";
 import { initServerBar, selectedServers, setRegistry } from "./ui/serverBar";
 import { serverLabel } from "./ui/serverSettings";
-import { initSettings, isSettingsOpen, openSettings, syncPolicy } from "./ui/settings";
+import { initSettings, isSettingsOpen, openSettings, syncPolicy, triggerUpdateCheck } from "./ui/settings";
 import { toast } from "./ui/toast";
 import { checkUpdateBubble } from "./ui/updateBubble";
 
@@ -503,6 +503,8 @@ export function switchMode(m: "manager" | "local"): void {
   if (m === mode) return;
   mode = m;
   api.setMode(m);
+  rows = []; unreachable = []; polledServers.clear(); selectedRows.clear();
+  renderList(); // счётчик и список сразу сбрасываются под новый режим
   applyMode();
 }
 
@@ -530,7 +532,15 @@ export async function bootstrap(): Promise<void> {
   initServerBar(el<HTMLElement>("[data-serverbar]"), registry, {
     onSelectionChange: onSelectionChanged,
     onManageCredentials: openRegistry,
-    onRegistryChange: (r) => { appRegistry = r; setModalRegistry(r); renderList(); },
+    onRegistryChange: (r) => {
+      appRegistry = r; setModalRegistry(r);
+      const exist = new Set([...r.servers, ...r.clusters.flatMap((c) => c.servers)]);
+      rows = rows.filter((row) => row.server === "" || exist.has(row.server));
+      unreachable = unreachable.filter((u) => exist.has(u.server));
+      polledServers = new Set([...polledServers].filter((sv) => exist.has(sv)));
+      cleanupSelection();
+      renderList();
+    },
   });
 
   bindActions();
@@ -544,7 +554,7 @@ export async function bootstrap(): Promise<void> {
   paintPolicy(await api.getPolicy());
 
   // уведомление об обновлении — баббл (проверка при старте и раз в 6 часов)
-  const hook = { onOpenSettings: openSettings };
+  const hook = { onUpdate: () => { openSettings(); setTimeout(triggerUpdateCheck, 100); } };
   checkUpdateBubble(hook);
   setInterval(() => checkUpdateBubble(hook), UPDATE_CHECK_MS);
 

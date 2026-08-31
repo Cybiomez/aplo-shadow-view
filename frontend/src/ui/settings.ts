@@ -215,3 +215,8 @@ function bindUpdate(): void {
   });
 }
 
+/** Открыть настройки уже с запущенной проверкой обновлений (из баббла). */
+export function triggerUpdateCheck(): void {
+  const btn = overlay?.querySelector<HTMLButtonElement>("[data-check]");
+  if (btn) btn.click();
+}

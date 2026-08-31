@@ -123,6 +123,9 @@ class Api:
         credentials.delete_profile("zabbix:" + name)
         return self._get_registry()
 
+    def reorder_servers(self, order: list) -> dict:
+        self._registry.reorder(order); return self._get_registry()
+
     def move_server(self, host: str, cluster: str = "") -> dict:
         self._registry.move_server(host, cluster); return self._get_registry()
 

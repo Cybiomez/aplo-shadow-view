@@ -1,5 +1,6 @@
 // Панель серверов (режим «Менеджер»): плоский список серверов локальной сети,
 // добавляются вручную. Опрашивается только выбранное. Без кластеров.
+import { api } from "../bridge";
 import type { Registry } from "../types";
 import { icons } from "./icons";
 import { openServerForm, serverLabel } from "./serverSettings";
@@ -14,6 +15,7 @@ let host: HTMLElement;
 let hooks: Hooks;
 let registry: Registry = { clusters: [], servers: [], profiles: [], serverConfig: {} };
 const selected = new Set<string>();
+let dragSrv: string | null = null;
 
 export function initServerBar(mount: HTMLElement, reg: Registry, h: Hooks): void {
   host = mount;
@@ -47,7 +49,8 @@ function render(): void {
   const cardsHtml = servers.length
     ? servers.map((srv) => {
         const on = selected.has(srv) ? " on" : "";
-        return `<div class="sb-card${on}">
+        return `<div class="sb-card${on}" draggable="true" data-card="${enc(srv)}" title="Перетащите, чтобы изменить порядок">
+          <span class="sb-drag" aria-hidden="true">⋮⋮</span>
           <label class="sb-pick"><input type="checkbox" data-server="${enc(srv)}" ${selected.has(srv) ? "checked" : ""}/>
             <span class="sb-srv-name">${serverLabel(srv, registry)}</span></label>
           <button class="sb-cfg" data-cfg="${enc(srv)}" title="Данные и настройки сервера">${icons.gear}</button>
@@ -85,4 +88,24 @@ function render(): void {
     }));
   host.querySelector("[data-all]")?.addEventListener("click", () => { allServers().forEach((s) => selected.add(s)); render(); emit(); });
   host.querySelector("[data-none]")?.addEventListener("click", () => { selected.clear(); render(); emit(); });
+
+  // перетаскивание карточек для изменения порядка
+  host.querySelectorAll<HTMLElement>("[data-card]").forEach((card) => {
+    card.addEventListener("dragstart", () => { dragSrv = decodeURIComponent(card.dataset.card!); card.classList.add("dragging"); });
+    card.addEventListener("dragend", () => { dragSrv = null; card.classList.remove("dragging"); });
+    card.addEventListener("dragover", (e) => { e.preventDefault(); card.classList.add("drop-target"); });
+    card.addEventListener("dragleave", () => card.classList.remove("drop-target"));
+    card.addEventListener("drop", async (e) => {
+      e.preventDefault();
+      card.classList.remove("drop-target");
+      const target = decodeURIComponent(card.dataset.card!);
+      if (!dragSrv || dragSrv === target) return;
+      const order = allServers();
+      const from = order.indexOf(dragSrv), to = order.indexOf(target);
+      if (from < 0 || to < 0) return;
+      order.splice(from, 1); order.splice(to, 0, dragSrv);
+      dragSrv = null;
+      propagate(await api.reorderServers(order));
+    });
+  });
 }
