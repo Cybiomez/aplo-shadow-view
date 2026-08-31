@@ -9,22 +9,23 @@ let postponedThisSession = false;
 let bubble: HTMLElement | null = null;
 
 interface Hooks {
-  onOpenSettings(): void;
+  onUpdate(): void; // открыть настройки и запустить проверку/установку
 }
 
 function build(hooks: Hooks): HTMLElement {
   const el = document.createElement("div");
   el.className = "update-bubble";
   el.innerHTML = `
-    <button class="ub-body" data-open>
+    <div class="ub-body">
       <span class="ub-ic">${icons.install}</span>
       <span class="ub-text"><b data-title>Доступно обновление</b><span class="ub-sub" data-sub></span></span>
-    </button>
+    </div>
     <div class="ub-actions">
+      <button class="ub-btn solid" data-update>Обновить</button>
       <button class="ub-btn" data-postpone>Отложить</button>
       <button class="ub-btn ghost" data-dismiss>Не показывать</button>
     </div>`;
-  el.querySelector("[data-open]")!.addEventListener("click", () => hooks.onOpenSettings());
+  el.querySelector("[data-update]")!.addEventListener("click", () => { hide(); hooks.onUpdate(); });
   el.querySelector("[data-postpone]")!.addEventListener("click", () => {
     postponedThisSession = true;
     hide();
@@ -57,6 +58,6 @@ export async function checkUpdateBubble(hooks: Hooks): Promise<void> {
   bubble.dataset.version = notice.version;
   const channelLabel = notice.channel === "dev" ? " (канал dev)" : "";
   bubble.querySelector("[data-title]")!.textContent = `Доступно обновление v${notice.version}`;
-  bubble.querySelector("[data-sub]")!.textContent = `Установлена v${notice.current}${channelLabel}. Нажмите, чтобы обновить.`;
+  bubble.querySelector("[data-sub]")!.textContent = `Установлена v${notice.current}${channelLabel}.`;
   bubble.classList.add("show");
 }

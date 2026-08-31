@@ -190,6 +190,7 @@ body {
 }
 /* Окно подтверждения — поверх окна настроек */
 .overlay.overlay-top { z-index: 70; }
+.overlay.overlay-confirm { z-index: 100; }
 .modal {
   width: 100%; max-width: 440px; background: var(--surface);
   border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow-modal); overflow: hidden;
@@ -593,3 +594,19 @@ select.txt option, select.mini option, .auth-sel option { background: var(--surf
   background: var(--surface); border: 1px solid var(--border-strong); padding: 5px 12px; border-radius: 7px; cursor: pointer;
   &:hover { background: var(--accent-weak); border-color: var(--accent); }
 }
+
+/* Гарантированно убрать системный вид select (WebView2/Edge) */
+select.txt, select.mini, .auth-sel, .sort-toggles select {
+  appearance: none !important; -webkit-appearance: none !important; -moz-appearance: none !important;
+  background-color: var(--surface-2);
+}
+
+/* Кнопка «Обновить» в бабле */
+.ub-btn.solid { background: var(--accent); color: var(--accent-ink); border-color: transparent; &:hover { background: var(--accent-hover); } }
+.ub-body { display: flex; align-items: flex-start; gap: 11px; width: 100%; padding: 14px 14px 10px; text-align: left; }
+
+/* Перетаскивание карточек серверов */
+.sb-card { cursor: default; }
+.sb-drag { color: var(--faint); cursor: grab; font-size: 12px; letter-spacing: -2px; user-select: none; }
+.sb-card.dragging { opacity: .5; }
+.sb-card.drop-target { border-color: var(--accent); border-style: dashed; }

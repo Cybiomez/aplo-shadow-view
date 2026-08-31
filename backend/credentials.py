@@ -109,22 +109,29 @@ def has_profile(name: str) -> bool:
 # ---------- применение учётки к серверу (cmdkey) ----------
 
 def apply_server(host: str, domain: str, username: str, password: str) -> None:
-    """Положить креды в Credential Manager под ключи, которые подхватят net use,
-    quser, реестр и теневой mstsc. Пароль передаётся cmdkey (в командной строке —
-    осознанная плата; альтернатива — CredWrite domain-target, сложнее)."""
+    r"""Установить сессию к серверу под нужной учётной записью.
+
+    quser/tsdiscon/logoff ходят по RPC, а RPC НЕ читает Credential Manager — поэтому
+    для чужой учётки нужна активная SMB-сессия (net use): RPC к тому же хосту
+    переиспользует её контекст. cmdkey (TERMSRV) — отдельно для теневого mstsc.
+
+    Формат логина: доменная — DOMAIN\user; локальная (домен пуст) — ХОСТ\user
+    (локальный аккаунт живёт на самом сервере, не в домене)."""
     if sys.platform != "win32" or not host:
         return
-    user = f"{domain}\\{username}" if domain else username
-    # SMB/RPC (net use, quser, реестр, tsdiscon, logoff)
-    subprocess.run(["cmdkey", f"/add:{host}", f"/user:{user}", f"/pass:{password}"],
-                   capture_output=True, timeout=10, creationflags=_NO_WINDOW)
-    # RDP / теневой mstsc
-    subprocess.run(["cmdkey", f"/generic:TERMSRV/{host}", f"/user:{user}", f"/pass:{password}"],
+    h = host.split(":", 1)[0]  # без порта — RPC/SMB по стандартным портам
+    user = f"{domain}\\{username}" if domain else f"{h}\\{username}"
+    # активная SMB-сессия для RPC (quser/реестр/tsdiscon/logoff)
+    subprocess.run(["net", "use", f"\\\\{h}", f"/user:{user}", password],
+                   capture_output=True, timeout=15, creationflags=_NO_WINDOW)
+    # для теневого mstsc — через Credential Manager
+    subprocess.run(["cmdkey", f"/generic:TERMSRV/{h}", f"/user:{user}", f"/pass:{password}"],
                    capture_output=True, timeout=10, creationflags=_NO_WINDOW)
 
 
 def clear_server(host: str) -> None:
     if sys.platform != "win32" or not host:
         return
-    subprocess.run(["cmdkey", f"/delete:{host}"], capture_output=True, timeout=10, creationflags=_NO_WINDOW)
-    subprocess.run(["cmdkey", f"/delete:TERMSRV/{host}"], capture_output=True, timeout=10, creationflags=_NO_WINDOW)
+    h = host.split(":", 1)[0]
+    subprocess.run(["net", "use", f"\\\\{h}", "/delete", "/y"], capture_output=True, timeout=15, creationflags=_NO_WINDOW)
+    subprocess.run(["cmdkey", f"/delete:TERMSRV/{h}"], capture_output=True, timeout=10, creationflags=_NO_WINDOW)
